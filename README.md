@@ -30,8 +30,8 @@ Because the sample is for educational purposes only, it does not include the sto
 The  PSLQ paper doesn't mention it, but inside the PSLQ algorithm, several invariants can be checked at the end of each iteration. For implementers of any algorithm, checking invariants is a great way to discover bugs. The sample in this repository checks the following invariants with `testEqual1D` and `testEqual2D`:
 - _GG_<sup>_t_</sup> = _I_<sub>_n-1_</sub>
 - _AB_ = _I_<sub>_n_</sub>
-- _AH_<sub>_x_</sub>_G_<sub>_cum_</sub> = _H_, where _G_<sub>_cum_</sub> is the cumulative product of the _G_ matrices
+- _AH_<sub>_x_</sub>_G_<sub>_cum_</sub> = _H_, where _H_<sub>_x_</sub> is the initial value of _H_ and _G_<sub>_cum_</sub> is the cumulative product of the _G_ matrices
 - _xBH_ = _0_
-- _xH_<sub>_0_</sub> = 0, where _H_<sub>_0_</sub> is the initial value of _H_
+- _xH_<sub>_x_</sub> = 0, where _H_<sub>_x_</sub> is the initial value of _H_
 - det(_A_) = 1
 - det(_B_) = 1
