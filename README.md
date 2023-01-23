@@ -12,6 +12,7 @@ All the variable names in the [original paper](https://www.davidhbailey.com/dhbp
 - the matrices _A_, _B_, _D_, _E_, _G_, _H_ and _R_
 - the vectors _s_ and _x_
 - the scalars, _b_, _c_ and _d_.
+
 Some additional variables, like `D0`, are also used to track invariants as discussed below. The rule of thumb is, if a variable is mentioned in the paper, it is used under the same name in the code; but not vice-versa.
 
 # Running the Sample
