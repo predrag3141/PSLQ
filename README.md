@@ -28,6 +28,6 @@ The  PSLQ paper doesn't mention it, but inside the PSLQ algorithm, several invar
 - _AB_ = _I_<sub>_n_</sub>
 - _AH_<sub>_x_</sub>_G_<sub>_cum_</sub> = _H_, where _G_<sub>_cum_</sub> is the cumulative product of the _G_ matrices
 - _xBH_ = _0_
-- _xH<sub>_0_</sub> = 0, where _H_<sub>_0_</sub> is the initial value of _H_
+- _xH_<sub>_0_</sub> = 0, where _H_<sub>_0_</sub> is the initial value of _H_
 - det(_A_) = 1
 - det(_B_) = 1
