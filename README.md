@@ -8,7 +8,7 @@ where the a<sub>i</sub> are real numbers.
 
 # Contents of This Repository
 
-This instructive implementation of PSLQ serves as a reference only, and is not meant to perform serious calculations. For example, it could be used to verify new "serious" implementations of PSLQ, by enabling a developer to compare internal values in the new implementation to those in this one at runtime. It also illustrates the use of invariants to check the internals of one's implementation of the PSLQ algorithm.
+This repository contains just one source file, `PSLQ.py`. `PSLQ.py` is an instructive implementation of PSLQ meant to serve as a reference only, and not to perform serious calculations. For example, it could be used to verify new "serious" implementations of PSLQ, by enabling a developer to compare internal values in the new implementation to those in this one at runtime. It also illustrates the use of invariants to check the internals of one's implementation of the PSLQ algorithm.
 
 # Variable Names
 
