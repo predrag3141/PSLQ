@@ -82,10 +82,19 @@ Let _C_ and _Q<sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>
 Then,
 
 _H<sub>k</sub>_ = _CH<sub>x</sub>Q<sup>-1</sup>_
+
 _CH<sub>x</sub>_ = _H<sub>k</sub>Q_ (equation 3)
 
 Equation 3 is an LQ decomposition of non-singular _CH<sub>x</sub>_, because
 - _C_ is an _n_ x _n_ integer matrix with determinant 1, like all of the _R<sub>i</sub>_ and _D<sub>i</sub>_ in the original PSLQ paper.
 - _Q_ is orthogonal, like all of the _G<sub>i</sub>_ in the original PSLQ paper.
 
-This observation makes it possible to find a sharp lower bound on the Euclidean norm of any integer relation, _z_, of the PSLQ input, _x_.
+This observation makes it possible to find a sharp lower bound on the Euclidean norm of any integer relation, _m_, of the PSLQ input, _x_.
+
+The PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sup>t</sup>_ and derives the following identity, using <_x_,m<sup>t</sup> = 0:
+
+_Pm<sup>t</sup>_ = _m<sup>t</sup>_
+
+
+&sum<sub>j=1</sub>n<sup></sup>
+
