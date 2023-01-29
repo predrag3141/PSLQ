@@ -96,5 +96,5 @@ The PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sup>t</sup>_ and derives t
 _Pm<sup>t</sup>_ = _m<sup>t</sup>_
 
 
-&sum<sub>j=1</sub>n<sup></sup>
+&sum;<sub>j=1</sub>n<sup></sup>
 
