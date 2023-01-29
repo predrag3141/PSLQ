@@ -98,3 +98,8 @@ _Pm<sup>t</sup>_ = _m<sup>t</sup>_
 
 &sum;<sub>j=1</sub>n<sup></sup>
 
+<p>
+    <span>&Sigma;</span>
+    k ( N - k + 1 )
+</p>
+
