@@ -38,7 +38,7 @@ The  PSLQ paper doesn't mention it, but inside the PSLQ algorithm, several invar
 
 # Analysis of PSLQ
 
-The [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf) dances around, or just leaves out -- it's not clear which! -- a key fact about the diagonal of _H_: The largest diagonal element in _H_ is a bound on the size of a solution. The explicit bound the paper gives is on the size of a solution is 1/|_H_|, where |_H_| is the [Frobenius norm](https://mathworld.wolfram.com/FrobeniusNorm.html) of H. The diagonal entries in _H_ star in complex arguments of equations (17) through (30), which conclude with a formula, (30), for the number of iterations PSLQ takes to find a solution of a given norm. But for some reason the paper doesn't use them as a bound on the smallest solution while the algorithm is running.
+The [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf) dances around, or just leaves out -- it's not clear which! -- a key fact about the diagonal of _H_: The reciprocal of the largest diagonal element in _H_ is a bound on the size of a solution. The explicit bound the paper gives on the size of a solution is 1/|_H_|, where |_H_| is the [Frobenius norm](https://mathworld.wolfram.com/FrobeniusNorm.html) of H. The diagonal entries in _H_ star in complex arguments of equations (17) through (30), which conclude with a formula, (30), for the number of iterations PSLQ takes to find a solution of a given norm. But for some reason the paper doesn't use them as a bound on the smallest solution while the algorithm is running.
 
 ## A Sharper Lower Bound on the Smallest Solution While PSLQ is Running
 
@@ -52,8 +52,8 @@ is found on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https:/
 
 The notation used below follows the original PSLQ paper, except many matrices are indexed by an iteration number denoted _k_. Initial matrices are:
 - _x_, the input to PSLQ. It is a unit vector of real numbers, none of which is 0.
-- _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_
 - _H<sub>x</sub>_ is the initial value of the _n_ x _n-1_ matrix _H_.
+- _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_
 
 Below is notation for a specific iteration _k_ of the PSLQ algorithm as presented in the original paper. _k_ starts at 1 (as opposed to 0). If _k_ = 1, _H_<sub>k-1</sub> = _H<sub>x</sub>_.
 
@@ -111,7 +111,7 @@ From equation 5 comes the following proposition: If _(Cm)<sub>p,1</sub>_ = 0 for
 
 _(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 6)
 
-Substituting from equation 5 in the first line and equation 3 in thr fourth line,
+Substituting from equation 5 in the first line and equation 4 in thr fourth line,
 
 _Cm_ = _CPm_
 
@@ -123,7 +123,7 @@ _Cm_ = _CPm_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(QH<sub>x</sub><sup>t</sup>m)_ (equation 7)
 
-Using equation 7, we will now calculate _Cm<sub>i,1</sub>_, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
+Using equation 7, we will now calculate _(Cm)<sub>i,1</sub>_, starting with _i_ = 1, until _(Cm)_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
 
 If _i_ = 1, then using equation 7 in the second line below,
 
@@ -182,7 +182,7 @@ Let
 Note that
 - _C_ and _m_ are non-zero integer matrices and _C_ is non-singular, which makes the first line work in the calculation below
 - Equation 6 from the section, "A Formula for _(Cm)<sub>i,1</sub>_", permits the replacement of _(Cm)<sub>i,1</sub>_ in the second line below.
-- _Q_ is a product of the inverses of orthonormal matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as orthonormal. This makes _Q_ orthonormal, which is used in the fourth line below to conclude that the norm of a row in _QH_ is 1.
+- _Q_ is a product of the inverses of matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as orthonormal. This makes _Q_ orthonormal, which is one of two facts used in the fourth line below to conclude that the norm of a row in _QH_ is 1.
 - _H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_, which is the second fact needed to conclude that the norm of a row in _QH_ is 1.
 
 1 &le; |_(Cm)<sub>i,1</sub>_|
