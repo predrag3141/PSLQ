@@ -46,20 +46,22 @@ There is a sharper bound than 1/|_H_| on the size of a solution while the algori
 
 1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
 
-is found on pages 97-99 of [inear Algebra in Situ, CAAM 335, Fall 2016](https://www.cmor-faculty.rice.edu/~cox/lais/bundle.pdf) by Steven J. Cox. This is a textbook that covers many topics, including QR decomposition. QR decomposition is the same as LQ decomposition, used in PS_LQ_, except every matrix is transposed. Because the overall topic is QR decomposition, every matrix in the PSLQ algorithm is transposed; and many are renamed. In what follows, the argument in "Linear Algebra in Situ" is repeated here, but in the LQ context, using similar names to those in the original PSLQ paper and in the source code, `PSLQ.py`.
+is found on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https://www.cmor-faculty.rice.edu/~cox/lais/bundle.pdf) by Steven J. Cox. This is a textbook that covers many topics, including QR decomposition. QR decomposition is the same as LQ decomposition, used in PSLQ, except every matrix is transposed. Because the overall topic is QR decomposition in this work, every matrix in the PSLQ algorithm is transposed there; and many are renamed. In what follows, the argument in "Linear Algebra in Situ" is repeated here, but in the LQ context, using similar names to those in the original PSLQ paper and in the source code, `PSLQ.py`.
 
 ### Notation
 
 The notation used below follows the original PSLQ paper, except many matrices are indexed by iteration. Initial matrices are:
 - _x_, the input to PSLQ. It is a unit vector of real numbers, none of which is 0.
-- _P_ = _HH<sup>t</sup>_
+- _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_
 - _H<sub>x</sub>_ is the initial value of the _n_ x _n-1_ matrix _H_.
 
-Below is notation for a specific iteration _k_ of the PSLQ algorithm. _k_ starts at 1 (as opposed to 0). If _k_ = 1, _H_<sub>k-1</sub> = _H<sub>x</sub>_. - Step 1
+Below is notation for a specific iteration _k_ of the PSLQ algorithm as presented in the original paper. _k_ starts at 1 (as opposed to 0). If _k_ = 1, _H_<sub>k-1</sub> = _H<sub>x</sub>_.
+
+- Step 1
   - _H_<sub>k</sub> is the _n_ x _n-1_ matrix _H_ after this iteration.
-  - _D<sub>k</sub>_ is the _n_ x _n_ integer matrix used to update _H<sub>k-1</sub>_ in step 1 of this iteration.
+  - _D<sub>k</sub>_ is the _n_ x _n_ integer matrix used to update _H<sub>k-1</sub>_ in step 1 of iteration _k_.
 - Step 2
-  - _j_ is the integer selected in step 2 of this iteration.
+  - _j_ is the integer selected in step 2 of iteration _k_.
 - Step 3
   - _R<sub>k</sub>_ is the _n_ x _n_ permutation matrix such that _R<sub>k</sub>M_ swaps rows _j_ and _j+1_ of _M_. The PSLQ paper names this _R<sub>j</sub>_, after the starting index _j_ of the row swap. In what follows we need to track _R_ over multiple iterations, so the _k_ subscript is necessary.
   - _G<sub>k</sub>_ is the _n-1_ x _n-1_ orhtogonal matrix that the PSLQ paper calls _G<sub>j</sub>_. The same comment about subscript _j_ vs. _k_ applies to _G_ that applied to _R_.
@@ -73,8 +75,11 @@ Using this notation, iteration _k_ can be interpreted as:
 After iteration _k_,
 
 _H<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>H<sub>k-1</sub>G<sub>k</sub>_
+
 &nbsp;&nbsp;&nbsp;&nbsp;= _R<sub>k</sub>D<sub>k</sub>R<sub>k-1</sub>D<sub>k-1</sub>H<sub>k-2</sub>G<sub>k-1</sub>G<sub>k</sub>_
+
 &nbsp;&nbsp;&nbsp;&nbsp;= ...
+
 &nbsp;&nbsp;&nbsp;&nbsp;= _R<sub>k</sub>D<sub>k</sub>R<sub>k-1</sub>D<sub>k-1</sub>...R<sub>1</sub>D<sub>1</sub> H<sub>x</sub> G<sub>1</sub>...G<sub>k-1</sub>G<sub>k</sub>_ (equation 2)
 
 Let _C_ and _Q<sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>_, respectively, in equation 2:
@@ -85,7 +90,7 @@ Let _C_ and _Q<sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>
 
 Computation of the bound mentioned at the beginning of this section,
 
-1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
+1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
 
 begins with the LQ decomposition of _CH<sub>x</sub>_:
 
@@ -97,11 +102,17 @@ Equation 3 is an LQ decomposition of non-singular _CH<sub>x</sub>_, because
 - _C_ is an _n_ x _n_ integer matrix with determinant 1, like all of the _R<sub>i</sub>_ and _D<sub>i</sub>_ in the original PSLQ paper.
 - _Q_ is orthogonal, like all of the _G<sub>i</sub>_ in the original PSLQ paper.
 
-The PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sup>t</sup>_ and derives the following identity, using <_x_,m<sup>t</sup> = 0:
+As noted earlier, the PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sup>t</sup>_. _P_ fixes any _m_ for which <_x,m_> = 0. In other words,
 
-_Pm<sup>t</sup>_ = _m<sup>t</sup>_ (equation 4)
+_xm_ = 0 &rArr; _Pm_ = _m_ (equation 4)
 
-Substituting from equation 3,
+#### A Formula for _(Cm)<sub>p,1</sub>_
+
+From equation 4 comes the proposition: If _(Cm)<sub>p,1</sub>_ = 0 for p &lt; i, then
+
+_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 5)
+
+Substituting from equation 4,
 
 _Cm_ = _CPm_
 
@@ -111,9 +122,9 @@ _Cm_ = _CPm_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _(H<sub>k</sub>Q)(H<sub>x</sub><sup>t</sup>m)_
 
-&nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(QH<sub>x</sub><sup>t</sup>m)_ (equation 5)
+&nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(QH<sub>x</sub><sup>t</sup>m)_ (equation 6)
 
-Using equation 5, we will now calculate the _ith_ entry of _Cm_<sub>i,1</sub>, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub> = 0.
+Using equation 6, we will now calculate the _ith_ entry of _Cm<sub>i,1</sub>_, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub> = 0.
 
 If _i_ = 1,
 
@@ -121,7 +132,7 @@ _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>1,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = &sum<sub>p</sub> _(H<sub>k</sub>)<sub>1,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 6)
+&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 7)
 
 If _(Cm)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
 
@@ -129,7 +140,7 @@ If _(Cm)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
 
 Since _H<sub>k</sub>_ has no 0s on its diagonal,
 
-_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 7)
+_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 8)
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>2,1</sub>_
 
@@ -137,15 +148,15 @@ _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>2,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>2,1</sub>_)(0) + _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ (equation 8)
+&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ (equation 9)
 
 If _(Cm)<sub>1,1</sub>_ = _(Cm)<sub>2,1</sub>_ = 0, we continue with _i_ = 3.
 
 0 = _(Cm)<sub>2,1</sub>_ = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
-From equation 7 and since _H<sub>k</sub>_ has no 0s on its diagonal,
+From equation 8 and since _H<sub>k</sub>_ has no 0s on its diagonal,
 
-_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ = 0 (equation 9)
+_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ = 0 (equation 10)
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>3,1</sub>_
 
@@ -157,6 +168,6 @@ _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>3,1</sub>_
 
 This reasoning continues until the first _i_ for which _(Cm)<sub>i,1</sub>_ &ne; 0. The formula for _(Cm)<sub>i,1</sub>_ is
 
-_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_
+_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 5)
 
 
