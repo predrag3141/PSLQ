@@ -89,7 +89,7 @@ Let _C_ and _Q<sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>
 
 Computation of the bound mentioned at the beginning of this section,
 
-1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0, (equation 3)
+1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (equation 3),
 
 begins with the LQ decomposition of _CH<sub>x</sub>_:
 
@@ -173,7 +173,7 @@ _(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</s
 
 Recall that the bound to prove is
 
-1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0, (equation 3)
+1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (repeating equation 3)
 
 Let
 - _i_ be the smallest index for which _(Cm)<sub>i,1</sub>_ &ne; 0
@@ -187,11 +187,10 @@ Note that
 
 1 &le; |_(Cm)<sub>i,1</sub>_|
 
-&nbsp;&nbsp;&nbsp;&nbsp; = | _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ |
+&nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_|
 
 &nbsp;&nbsp;&nbsp;&nbsp; &le; |_(H<sub>k</sub>)<sub>i,i</sub>_| |_(QH<sub>x</sub><sup>t</sup>)<sub>i</sub>_| |_m_|
 
 &nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_| |_m_|
 
 &nbsp;&nbsp;&nbsp;&nbsp; &le; max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) |_m_| (proving equation 3)
-
