@@ -105,7 +105,7 @@ As noted earlier, the PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sub>x</s
 
 _xm_ = 0 &rArr; _Pm_ = _m_ (equation 4)
 
-#### A Formula for _(Cm)<sub>p,1</sub>_
+#### A Formula for _(Cm)<sub>i,1</sub>_
 
 From equation 4 comes the following proposition: If _(Cm)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
 
@@ -125,7 +125,7 @@ _Cm_ = _CPm_
 
 Using equation 6, we will now calculate _Cm<sub>i,1</sub>_, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
 
-If _i_ = 1,
+If _i_ = 1, then using equation 6 in the second line below,
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>1,1</sub>_
 
