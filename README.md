@@ -89,29 +89,29 @@ Let _C_ and _Q<sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>
 
 Computation of the bound mentioned at the beginning of this section,
 
-1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
+1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0, (equation 3)
 
 begins with the LQ decomposition of _CH<sub>x</sub>_:
 
 _H<sub>k</sub>_ = _CH<sub>x</sub>Q<sup>-1</sup>_
 
-_CH<sub>x</sub>_ = _H<sub>k</sub>Q_ (equation 3)
+_CH<sub>x</sub>_ = _H<sub>k</sub>Q_ (equation 4)
 
-Equation 3 is an LQ decomposition of non-singular _CH<sub>x</sub>_, because
+Equation 4 is an LQ decomposition of non-singular _CH<sub>x</sub>_, because
 - _C_ is an _n_ x _n_ integer matrix with determinant 1, like all of the _R<sub>i</sub>_ and _D<sub>i</sub>_ in the original PSLQ paper.
 - _Q_ is orthogonal, like all of the _G<sub>i</sub>_ in the original PSLQ paper.
 
 As noted earlier, the PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_. _P_ fixes any _m_ for which <_x,m_> = 0. In other words,
 
-_xm_ = 0 &rArr; _Pm_ = _m_ (equation 4)
+_xm_ = 0 &rArr; _Pm_ = _m_ (equation 5)
 
 #### A Formula for _(Cm)<sub>i,1</sub>_
 
-From equation 4 comes the following proposition: If _(Cm)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
+From equation 5 comes the following proposition: If _(Cm)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
 
-_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 5)
+_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 6)
 
-Substituting from equation 4 in the first line and equation 3 in thr fourth line,
+Substituting from equation 5 in the first line and equation 3 in thr fourth line,
 
 _Cm_ = _CPm_
 
@@ -121,17 +121,17 @@ _Cm_ = _CPm_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _(H<sub>k</sub>Q)(H<sub>x</sub><sup>t</sup>m)_
 
-&nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(QH<sub>x</sub><sup>t</sup>m)_ (equation 6)
+&nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(QH<sub>x</sub><sup>t</sup>m)_ (equation 7)
 
-Using equation 6, we will now calculate _Cm<sub>i,1</sub>_, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
+Using equation 7, we will now calculate _Cm<sub>i,1</sub>_, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
 
-If _i_ = 1, then using equation 6 in the second line below,
+If _i_ = 1, then using equation 7 in the second line below,
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>1,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>1,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 7)
+&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 8)
 
 If _(Cm)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
 
@@ -139,7 +139,7 @@ If _(Cm)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
 
 Since _H<sub>k</sub>_ has no 0s on its diagonal,
 
-_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 8)
+_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 9)
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>2,1</sub>_
 
@@ -147,15 +147,15 @@ _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>2,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>2,1</sub>_)(0) + _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ (equation 9)
+&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ (equation 10)
 
 If _(Cm)<sub>1,1</sub>_ = _(Cm)<sub>2,1</sub>_ = 0, we continue with _i_ = 3.
 
 0 = _(Cm)<sub>2,1</sub>_ = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
-From equation 8 and since _H<sub>k</sub>_ has no 0s on its diagonal,
+From equation 9 and since _H<sub>k</sub>_ has no 0s on its diagonal,
 
-_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ = 0 (equation 10)
+_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ = 0 (equation 11)
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>3,1</sub>_
 
@@ -167,5 +167,31 @@ _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>3,1</sub>_
 
 This reasoning continues until the first _i_ for which _(Cm)<sub>i,1</sub>_ &ne; 0. The formula for _(Cm)<sub>i,1</sub>_ is
 
-_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 5)
+_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 6)
+
+#### Proof of the Bound
+
+Recall that the bound to prove is
+
+1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0, (equation 3)
+
+Let
+- _i_ be the smallest index for which _(Cm)<sub>i,1</sub>_ &ne; 0
+- _(QH<sub>x</sub><sup>t</sup>)<sub>i</sub>_ denote row _i_ of _QH<sub>x</sub><sup>t</sup>_
+
+Note that
+- _C_ and _m_ are non-zero integer matrices and _C_ is non-singular, which makes the first line work in the calculation below
+- Equation 6 from the section, "A Formula for _(Cm)<sub>i,1</sub>_", permits the replacement of _(Cm)<sub>i,1</sub>_ in the second line below.
+- _Q_ is a product of the inverses of orthonormal matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as orthonormal. This makes _Q_ orthonormal, which is used in the fourth line below to conclude that the norm of a row in _QH_ is 1.
+- _H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_, which is the second fact needed to conclude that the norm of a row in _QH_ is 1.
+
+1 &le; |_(Cm)<sub>i,1</sub>_|
+
+&nbsp;&nbsp;&nbsp;&nbsp; = | _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ |
+
+&nbsp;&nbsp;&nbsp;&nbsp; &le; |_(H<sub>k</sub>)<sub>i,i</sub>_| |_(QH<sub>x</sub><sup>t</sup>)<sub>i</sub>_| |_m_|
+
+&nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_| |_m_|
+
+&nbsp;&nbsp;&nbsp;&nbsp; &le; max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) |_m_| (proving equation 3)
 
