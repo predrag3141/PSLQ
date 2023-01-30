@@ -38,7 +38,7 @@ The  PSLQ paper doesn't mention it, but inside the PSLQ algorithm, several invar
 
 # Analysis of PSLQ
 
-The [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf) dances around, or just leaves out -- it's not clear which! -- a key fact about the diagonal of _H_: The largest diagonal element in _H_ is a bound on the size of a solution. The explicit bound the paper gives is on the size of a solution is 1/|_H_|, where |_H_| is the [Frobenius norm](https://mathworld.wolfram.com/FrobeniusNorm.html) of H. The diagonal entris in _H_ star in complex arguments of equations (17) through (30), which conclude with a formula, (30), for the number of iterations PSLQ takes to find a solution of a given norm.
+The [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf) dances around, or just leaves out -- it's not clear which! -- a key fact about the diagonal of _H_: The largest diagonal element in _H_ is a bound on the size of a solution. The explicit bound the paper gives is on the size of a solution is 1/|_H_|, where |_H_| is the [Frobenius norm](https://mathworld.wolfram.com/FrobeniusNorm.html) of H. The diagonal entries in _H_ star in complex arguments of equations (17) through (30), which conclude with a formula, (30), for the number of iterations PSLQ takes to find a solution of a given norm. But for some reason the paper doesn't use them as a bound on the smallest solution while the algorithm is running.
 
 ## A Sharper Lower Bound on the Smallest Solution While PSLQ is Running
 
@@ -50,7 +50,7 @@ is found on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https:/
 
 ### Notation
 
-The notation used below follows the original PSLQ paper, except many matrices are indexed by iteration. Initial matrices are:
+The notation used below follows the original PSLQ paper, except many matrices are indexed by and iteration number denoted _k_. Initial matrices are:
 - _x_, the input to PSLQ. It is a unit vector of real numbers, none of which is 0.
 - _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_
 - _H<sub>x</sub>_ is the initial value of the _n_ x _n-1_ matrix _H_.
@@ -58,7 +58,7 @@ The notation used below follows the original PSLQ paper, except many matrices ar
 Below is notation for a specific iteration _k_ of the PSLQ algorithm as presented in the original paper. _k_ starts at 1 (as opposed to 0). If _k_ = 1, _H_<sub>k-1</sub> = _H<sub>x</sub>_.
 
 - Step 1
-  - _H_<sub>k</sub> is the _n_ x _n-1_ matrix _H_ after this iteration.
+  - _H_<sub>k</sub> is the _n_ x _n-1_ matrix _H_ after iteration _k_.
   - _D<sub>k</sub>_ is the _n_ x _n_ integer matrix used to update _H<sub>k-1</sub>_ in step 1 of iteration _k_.
 - Step 2
   - _j_ is the integer selected in step 2 of iteration _k_.
@@ -69,8 +69,7 @@ Below is notation for a specific iteration _k_ of the PSLQ algorithm as presente
 Using this notation, iteration _k_ can be interpreted as:
 1. _H_ <- _D<sub>k</sub>H<sub>k-1</sub>_. _H_ is an intermediate value, not quite _H<sub>k</sub>_ yet.
 2. Choose _j_ so _R<sub>k</sub>_ and _G<sub>k</sub>_ are defined.
-3. _H<sub>k</sub>_ <- _R<sub>k</sub>HG<sub>k</sub>_
-&nbsp;&nbsp;&nbsp;&nbsp;=_R<sub>k</sub>D<sub>k</sub>H<sub>k-1</sub>G<sub>k</sub>_
+3. _H<sub>k</sub>_ <- _R<sub>k</sub>HG<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>H<sub>k-1</sub>G<sub>k</sub>_
 
 After iteration _k_,
 
@@ -102,17 +101,17 @@ Equation 3 is an LQ decomposition of non-singular _CH<sub>x</sub>_, because
 - _C_ is an _n_ x _n_ integer matrix with determinant 1, like all of the _R<sub>i</sub>_ and _D<sub>i</sub>_ in the original PSLQ paper.
 - _Q_ is orthogonal, like all of the _G<sub>i</sub>_ in the original PSLQ paper.
 
-As noted earlier, the PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sup>t</sup>_. _P_ fixes any _m_ for which <_x,m_> = 0. In other words,
+As noted earlier, the PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_. _P_ fixes any _m_ for which <_x,m_> = 0. In other words,
 
 _xm_ = 0 &rArr; _Pm_ = _m_ (equation 4)
 
 #### A Formula for _(Cm)<sub>p,1</sub>_
 
-From equation 4 comes the proposition: If _(Cm)<sub>p,1</sub>_ = 0 for p &lt; i, then
+From equation 4 comes the following proposition: If _(Cm)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
 
 _(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 5)
 
-Substituting from equation 4,
+Substituting from equation 4 in the first line and equation 3 in thr fourth line,
 
 _Cm_ = _CPm_
 
@@ -124,13 +123,13 @@ _Cm_ = _CPm_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(QH<sub>x</sub><sup>t</sup>m)_ (equation 6)
 
-Using equation 6, we will now calculate the _ith_ entry of _Cm<sub>i,1</sub>_, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub> = 0.
+Using equation 6, we will now calculate _Cm<sub>i,1</sub>_, starting with _i_ = 1, until _Cm_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
 
 If _i_ = 1,
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>1,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = &sum<sub>p</sub> _(H<sub>k</sub>)<sub>1,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>1,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 7)
 
@@ -144,7 +143,7 @@ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 8)
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>2,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = &sum<sub>p</sub> _(H<sub>k</sub>)<sub>2,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>2,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>2,1</sub>_)(0) + _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
@@ -160,7 +159,7 @@ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(QH<sub>x</sub><sup>t</sup>m)<s
 
 _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>3,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = &sum<sub>p</sub> _(H<sub>k</sub>)<sub>3,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>3,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>3,1</sub>_)(0) + (_(H<sub>k</sub>)<sub>3,2</sub>_)(0) + _(H<sub>k</sub>)<sub>3,3</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>3,1</sub>_
 
@@ -169,5 +168,4 @@ _(Cm)<sub>i,1</sub>_ = _(Cm)<sub>3,1</sub>_
 This reasoning continues until the first _i_ for which _(Cm)<sub>i,1</sub>_ &ne; 0. The formula for _(Cm)<sub>i,1</sub>_ is
 
 _(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 5)
-
 
