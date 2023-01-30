@@ -50,7 +50,7 @@ is found on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https:/
 
 ### Notation
 
-The notation used below follows the original PSLQ paper, except many matrices are indexed by and iteration number denoted _k_. Initial matrices are:
+The notation used below follows the original PSLQ paper, except many matrices are indexed by an iteration number denoted _k_. Initial matrices are:
 - _x_, the input to PSLQ. It is a unit vector of real numbers, none of which is 0.
 - _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_
 - _H<sub>x</sub>_ is the initial value of the _n_ x _n-1_ matrix _H_.
