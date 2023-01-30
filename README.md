@@ -182,8 +182,8 @@ Let
 Note that
 - _C_ and _m_ are non-zero integer matrices and _C_ is non-singular, which makes the first line work in the calculation below
 - Equation 6 from the section, "A Formula for _(Cm)<sub>i,1</sub>_", permits the replacement of _(Cm)<sub>i,1</sub>_ in the second line below.
-- _Q_ is a product of the inverses of matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as orthonormal. This makes _Q_ orthonormal, which is one of two facts used in the fourth line below to conclude that the norm of a row in _QH_ is 1.
-- _H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_, which is the second fact needed to conclude that the norm of a row in _QH_ is 1.
+- _Q_ is a product of the inverses of matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as orthonormal. This makes _Q_ orthonormal, which is one of two facts used in the fourth line below to conclude that the norm of a row in _QH<sub>x</sub>x<sup>t</sup>_ is 1.
+- _H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_, which is the second fact needed to conclude that the norm of a row in _QH<sub>x</sub>x<sup>t</sup>_ is 1.
 
 1 &le; |_(Cm)<sub>i,1</sub>_|
 
