@@ -192,6 +192,7 @@ B = getIdentity(n)
 # For use in testing invariants
 x_1xn = array(x)
 H0_nxnm1 = array(H)
+testEqual2D(matmul(transpose(H0_nxnm1), H0_nxnm1), getIdentity(n - 1), "HtH", "I")
 H0cumG_nxnm1 = array(H)
 
 # PSLQ Iterations
