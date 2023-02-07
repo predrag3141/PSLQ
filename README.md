@@ -2,7 +2,7 @@
 
 This repository contains an implementation of the PSLQ Algorithm. PSLQ is an algorithm that can find a small but not-all-zero integer-only solution z<sub>1</sub>,z<sub>2</sub>,...,z<sub>n</sub> of the equation
 
-x<sub>1</sub>z<sub>1</sub>+x<sub>2</sub>z<sub>2</sub>+...+x<sub>n</sub>z<sub>n</sub>=0 (equation 1)
+x<sub>1</sub>z<sub>1</sub>+x<sub>2</sub>z<sub>2</sub>+...+x<sub>n</sub>z<sub>n</sub>=0
 
 where the x<sub>i</sub> are real numbers.
 
@@ -28,17 +28,60 @@ Because the sample is for educational purposes only, it does not include the sto
 # Invariants
 
 The  PSLQ paper doesn't mention it, but inside the PSLQ algorithm, several invariants can be checked at the end of each iteration. For implementers of any algorithm, checking invariants is a great way to discover bugs. The sample in this repository checks the following invariants with `testEqual1D` and `testEqual2D`:
-- _GG_<sup>_t_</sup> = _I_<sub>_n-1_</sub>
+- _H<sub>x</sub><sup>t</sup>H_ = _I<sub>n-1</sub>_, where _H<sub>x</sub>_ is the initial value of _H_
+- _GG_<sup>_t_</sup> = _I<sub>n-1</sub>_
 - _AB_ = _I_<sub>_n_</sub>
-- _AH_<sub>_x_</sub>_G_<sub>_cum_</sub> = _H_, where _H_<sub>_x_</sub> is the initial value of _H_ and _G_<sub>_cum_</sub> is the cumulative product of the _G_ matrices
+- _AH<sub>x</sub>G_<sub>_cum_</sub> = _H_, where _H<sub>x</sub>_ is the initial value of _H_ and _G<sub>cum</sub>_ is the cumulative product of the _G_ matrices
 - _xBH_ = _0_
-- _xH_<sub>_x_</sub> = 0, where _H_<sub>_x_</sub> is the initial value of _H_
+- _xH<sub>x</sub>_ = 0, where _H<sub>x</sub>_ is the initial value of _H_
 - det(_A_) = 1
 - det(_B_) = 1
 
 # Analysis of PSLQ
 
 The [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf) dances around, or just leaves out -- it's not clear which! -- a key fact about the diagonal of _H_: The reciprocal of the largest diagonal element in _H_ is a bound on the size of a solution. The explicit bound the paper gives on the size of a solution is 1/|_H_|, where |_H_| is the [Frobenius norm](https://mathworld.wolfram.com/FrobeniusNorm.html) of H. The diagonal entries in _H_ star in complex arguments of equations (17) through (30), which conclude with a formula, (30), for the number of iterations PSLQ takes to find a solution of a given norm. But for some reason the paper doesn't use them as a bound on the smallest solution while the algorithm is running.
+
+## Geometry of PSLQ
+
+Here we present one geometric view of PSLQ. There is at least one other geometric view, not covered in detail here: PSLQ finds an integer matrix with determinant 1 whose columns approximate the solution plane,
+
+_S_ = {_m_ : <_x_,_m_> = 0}
+
+So what is presented in detail here is not *the* geometric view of PSLQ, but it is one very appealing interpretation.
+
+PSLQ computes a matrix, _A<sub>k</sub>_, at every iteration _k_. This "_A_" is the same _A_ as in the PSLQ paper, in the invariants above and in the section below, "A Sharper Lower Bound on the Smallest Solution While PSLQ is Running" -- the "Sharper Bound" section for short. Here as in that section, the subscript _k_ is useful to track _A_ through different iterations _k_=1,2,3,... of PSLQ.
+
+Successive _A<sub>k</sub>_s get closer and closer to a change of basis, followed by a rotation and rounding, when applied to _S_. To see why, let
+- (_H<sub>x</sub>_)_</sub>p</sub>_ be column _p_ of _H<sub>x</sub>_ for _p_=1,...,_n-1_
+- _m_ = &sum;<sub>p</sub> _y<sub>p</sub>(_H<sub>x</sub>_)<sub>_p_</sub> be an arbitrary element of _S_
+
+Then _A<sub>k</sub>m_ = _H<sub>k</sub>(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)_ (equation 7 from the "Sharper Bound" section)
+
+### Change of Basis
+
+The change of basis comes from the product _H<sub>x</sub><sup>t</sup>m_ in the right-hand side of equation 7. In the context of _Am_, _m_ is expressed in terms of the basis (e<sub>1</sub>, ..., e<sub>n</sub>). But _H<sub>x</sub><sup>t</sup>m)_ gives _m_ in terms of the basis (_(H<sub>x</sub>_)<sub>1</sub>, ..., _(H<sub>x</sub>_)<sub>n-1</sub>,). In other words,
+
+_(H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ = _y<sub>i</sub>_ (equation 1)
+
+The reason for this is that
+
+_H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>,
+
+as noted in the section above on invariants. The following calculation uses this identity to prove equation 1:
+
+_(H<sub>x</sub><sup>t</sup>m)<sub>i</sub>_ = (_H<sub>x</sub><sup>t</sup> (&sum;<sub>p</sub> _y<sub>p</sub>_ (_H<sub>x</sub>_)<sub>_p_</sub>)<sub>i</sub>
+
+&nbsp;&nbsp;&nbsp;&nbsp; = (&sum;<sub>p</sub> _y<sub>p</sub>_ _H<sub>x</sub><sup>t</sup> (_H<sub>x</sub>_)<sub>_p_</sub>)<sub>i</sub>
+
+&nbsp;&nbsp;&nbsp;&nbsp; = _y<sub>i</sub>_
+
+### Dilation and Rounding Error
+
+In equation 7, once _H<sub>x</sub><sup>t</sup>_ applies a change of basis to _m_, the result is rotated by a _Q<sub>k</sub>_, then dilated with error by _H<sub>k</sub>_. The dilation comes from the diagonal elements of _H<sub>k</sub>_, and the error comes from the off-diagonal elements -- including all of row _n_.
+
+The error is necessary because the left-hand side of equation 7 is an integer matrix, so this error can be considered to be rounding. But this rounding error decreases with each iteration of the PSLQ algorithm, because _H<sub>k</sub>_ tends towards a diagonal matrix 
+
+In summary, _Am_ is _m_ written as a combination of the columns of _H<sub>x</sub>_, rotated and dilated with rounding error.
 
 ## A Sharper Lower Bound on the Smallest Solution While PSLQ is Running
 
@@ -81,9 +124,9 @@ _H<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>H<sub>k-1</sub>G<sub>k</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _R<sub>k</sub>D<sub>k</sub>R<sub>k-1</sub>D<sub>k-1</sub>...R<sub>1</sub>D<sub>1</sub> H<sub>x</sub> G<sub>1</sub>...G<sub>k-1</sub>G<sub>k</sub>_ (equation 2)
 
-Let _C_ and _Q<sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>_, respectively, in equation 2:
-- _C_ = _R<sub>k</sub>D<sub>k</sub>R<sub>k-1</sub>D<sub>k-1</sub>...R<sub>1</sub>D<sub>1</sub>
-- _Q_ = (G<sub>1</sub>...G<sub>k-1</sub>G<sub>k</sub>)<sup>-1</sup>
+Let _A<sub>k</sub>_ and _Q<sub>k</sub><sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>_, respectively, in equation 2:
+- _A<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>R<sub>k-1</sub>D<sub>k-1</sub>...R<sub>1</sub>D<sub>1</sub>
+- _Q<sub></sub>_ = (G<sub>1</sub>...G<sub>k-1</sub>G<sub>k</sub>)<sup>-1</sup>
 
 ### The Bound
 
@@ -91,83 +134,83 @@ Computation of the bound mentioned at the beginning of this section,
 
 1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (equation 3),
 
-begins with the LQ decomposition of _CH<sub>x</sub>_:
+begins with the LQ decomposition of _A<sub></sub>H<sub>x</sub>_:
 
-_H<sub>k</sub>_ = _CH<sub>x</sub>Q<sup>-1</sup>_
+_H<sub>k</sub>_ = _A<sub>k</sub>H<sub>x</sub>Q<sup>-1</sup>_
 
-_CH<sub>x</sub>_ = _H<sub>k</sub>Q_ (equation 4)
+_A<sub>k</sub>H<sub>x</sub>_ = _H<sub>k</sub>Q_ (equation 4)
 
-Equation 4 is an LQ decomposition of non-singular _CH<sub>x</sub>_, because
-- _C_ is an _n_ x _n_ integer matrix with determinant 1, like all of the _R<sub>i</sub>_ and _D<sub>i</sub>_ in the original PSLQ paper.
-- _Q_ is orthogonal, like all of the _G<sub>i</sub>_ in the original PSLQ paper.
+Equation 4 is an LQ decomposition of non-singular _A<sub>k</sub>H<sub>x</sub>_, because
+- _A<sub>k</sub>_ is an _n_ x _n_ integer matrix with determinant 1, like all of the _R<sub>i</sub>_ and _D<sub>i</sub>_ in the original PSLQ paper.
+- _Q<sub>k</sub>_ is orthogonal, like all of the _G<sub>i</sub>_ in the original PSLQ paper.
 
 As noted earlier, the PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sub>x</sub><sup>t</sup>_. _P_ fixes any _m_ for which <_x,m_> = 0. In other words,
 
 _xm_ = 0 &rArr; _Pm_ = _m_ (equation 5)
 
-#### A Formula for _(Cm)<sub>i,1</sub>_
+#### A Formula for _(Am)<sub>i,1</sub>_
 
-From equation 5 comes the following proposition: If _(Cm)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
+From equation 5 comes the following proposition: If _(Am)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
 
-_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 6)
+_(Am)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 6)
 
 Substituting from equation 5 in the first line and equation 4 in thr fourth line,
 
-_Cm_ = _CPm_
+_A<sub>k</sub>m_ = _A<sub>k</sub>Pm_
 
-&nbsp;&nbsp;&nbsp;&nbsp;= _C(H<sub>x</sub>H<sub>x</sub><sup>t</sup>)m_
+&nbsp;&nbsp;&nbsp;&nbsp;= _A<sub>k</sub>(H<sub>x</sub>H<sub>x</sub><sup>t</sup>)m_
 
-&nbsp;&nbsp;&nbsp;&nbsp;= _(CH<sub>x</sub>)(H<sub>x</sub><sup>t</sup>m)_
+&nbsp;&nbsp;&nbsp;&nbsp;= _(AH<sub>x</sub>)(H<sub>x</sub><sup>t</sup>m)_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _(H<sub>k</sub>Q)(H<sub>x</sub><sup>t</sup>m)_
 
-&nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(QH<sub>x</sub><sup>t</sup>m)_ (equation 7)
+&nbsp;&nbsp;&nbsp;&nbsp;= _H<sub>k</sub>(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)_ (equation 7)
 
-Using equation 7, we will now calculate _(Cm)<sub>i,1</sub>_, starting with _i_ = 1, until _(Cm)_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
+Using equation 7, we will now calculate _(Am)<sub>i,1</sub>_, starting with _i_ = 1, until _(Am)_<sub>i,1</sub> &ne; 0. The index _p_ in the summations below ranges from 1 to _i_, after which _(H<sub>k</sub>)<sub>i,p</sub>_ = 0.
 
 If _i_ = 1, then using equation 7 in the second line below,
 
-_(Cm)<sub>i,1</sub>_ = _(Cm)<sub>1,1</sub>_
+_(Am)<sub>i,1</sub>_ = _(Am)<sub>1,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>1,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>1,p</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 8)
+&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 8)
 
-If _(Cm)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
+If _(Am)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
 
-0 = _(Cm)<sub>1,1</sub>_ = _(H<sub>k</sub>)<sub>1,1</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_
+0 = _(Am)<sub>1,1</sub>_ = _(H<sub>k</sub>)<sub>1,1</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_
 
 Since _H<sub>k</sub>_ has no 0s on its diagonal,
 
-_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 9)
+_(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 9)
 
-_(Cm)<sub>i,1</sub>_ = _(Cm)<sub>2,1</sub>_
+_(Am)<sub>i,1</sub>_ = _(Am)<sub>2,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>2,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>2,p</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>2,1</sub>_)(0) + _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>2,1</sub>_)(0) + _(H<sub>k</sub>)<sub>2,2</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ (equation 10)
+&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>2,2</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ (equation 10)
 
-If _(Cm)<sub>1,1</sub>_ = _(Cm)<sub>2,1</sub>_ = 0, we continue with _i_ = 3.
+If _(Am)<sub>1,1</sub>_ = _(Am)<sub>2,1</sub>_ = 0, we continue with _i_ = 3.
 
-0 = _(Cm)<sub>2,1</sub>_ = _(H<sub>k</sub>)<sub>2,2</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
+0 = _(Am)<sub>2,1</sub>_ = _(H<sub>k</sub>)<sub>2,2</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
 From equation 9 and since _H<sub>k</sub>_ has no 0s on its diagonal,
 
-_(QH<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(QH<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ = 0 (equation 11)
+_(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ = 0 (equation 11)
 
-_(Cm)<sub>i,1</sub>_ = _(Cm)<sub>3,1</sub>_
+_(Am)<sub>i,1</sub>_ = _(Am)<sub>3,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>3,p</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>3,p</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>3,1</sub>_)(0) + (_(H<sub>k</sub>)<sub>3,2</sub>_)(0) + _(H<sub>k</sub>)<sub>3,3</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>3,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = (_(H<sub>k</sub>)<sub>3,1</sub>_)(0) + (_(H<sub>k</sub>)<sub>3,2</sub>_)(0) + _(H<sub>k</sub>)<sub>3,3</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>3,1</sub>_
 
-&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>3,3</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>3,1</sub>_
+&nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>3,3</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>3,1</sub>_
 
-This reasoning continues until the first _i_ for which _(Cm)<sub>i,1</sub>_ &ne; 0. The formula for _(Cm)<sub>i,1</sub>_ is
+This reasoning continues until the first _i_ for which _(Am)<sub>i,1</sub>_ &ne; 0. The formula for _(Am)<sub>i,1</sub>_ is
 
-_(Cm)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 6)
+_(Am)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 6)
 
 #### Proof of the Bound
 
@@ -176,20 +219,20 @@ Recall that the bound to prove is
 1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (repeating equation 3)
 
 Let
-- _i_ be the smallest index for which _(Cm)<sub>i,1</sub>_ &ne; 0
-- _(QH<sub>x</sub><sup>t</sup>)<sub>i</sub>_ denote row _i_ of _QH<sub>x</sub><sup>t</sup>_
+- _i_ be the smallest index for which _(Am)<sub>i,1</sub>_ &ne; 0
+- _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>)<sub>i</sub>_ denote row _i_ of _Q<sub>k</sub>H<sub>x</sub><sup>t</sup>_
 
 Note that
-- _C_ and _m_ are non-zero integer matrices and _C_ is non-singular, which makes the first line work in the calculation below
-- Equation 6 from the section, "A Formula for _(Cm)<sub>i,1</sub>_", permits the replacement of _(Cm)<sub>i,1</sub>_ in the second line below.
-- _Q_ is a product of the inverses of matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as orthonormal. This makes _Q_ orthonormal, which is one of two facts used in the fourth line below to conclude that the norm of a row in _QH<sub>x</sub><sup>t</sup>_ is 1.
-- _H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_, which is the second fact needed to conclude that the norm of a row in _QH<sub>x</sub><sup>t</sup>_ is 1.
+- _A<sub>k</sub>_ and _m_ are non-zero integer matrices and _A<sub>k</sub>_ is non-singular, which makes the first line work in the calculation below
+- Equation 6 from the section, "A Formula for _(Am)<sub>i,1</sub>_", permits the replacement of _(Am)<sub>i,1</sub>_ in the second line below.
+- _Q<sub>k</sub>_ is a product of the inverses of matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as a rotation matrix. This makes _Q<sub>k</sub>_ a rotation matrix, which is one of two facts used in the fourth line below to conclude that the norm of a row in _Q<sub>k</sub>H<sub>x</sub><sup>t</sup>_ is 1.
+- _H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_, which is the second fact needed to conclude that the norm of a row in _Q<sub>k</sub>H<sub>x</sub><sup>t</sup>_ is 1.
 
-1 &le; |_(Cm)<sub>i,1</sub>_|
+1 &le; |_(Am)<sub>i,1</sub>_|
 
-&nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_ _(QH<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_|
+&nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_|
 
-&nbsp;&nbsp;&nbsp;&nbsp; &le; |_(H<sub>k</sub>)<sub>i,i</sub>_| |_(QH<sub>x</sub><sup>t</sup>)<sub>i</sub>_| |_m_|
+&nbsp;&nbsp;&nbsp;&nbsp; &le; |_(H<sub>k</sub>)<sub>i,i</sub>_| |_(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>)<sub>i</sub>_| |_m_|
 
 &nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_| |_m_|
 
