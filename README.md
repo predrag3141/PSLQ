@@ -41,7 +41,7 @@ The  PSLQ paper doesn't mention it, but inside the PSLQ algorithm, several invar
 
 The [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf) dances around, or just leaves out -- it's not clear which! -- a key fact about the diagonal of _H_: The reciprocal of the largest diagonal element in _H_ is a bound on the size of a solution. The explicit bound the paper gives on the size of a solution is 1/|_H_|, where |_H_| is the [Frobenius norm](https://mathworld.wolfram.com/FrobeniusNorm.html) of H. The diagonal entries in _H_ star in complex arguments of equations (17) through (30), which conclude with a formula, (30), for the number of iterations PSLQ takes to find a solution of a given norm. But for some reason the paper doesn't use them as a bound on the smallest solution while the algorithm is running.
 
-## Geometry of PSLQ
+## A Geometric View of PSLQ
 
 Here we present one geometric view of PSLQ. There is at least one other geometric view, not covered in detail here: PSLQ finds an integer matrix with determinant 1 whose columns approximate the solution plane,
 
@@ -51,7 +51,7 @@ So what is presented in detail here is not *the* geometric view of PSLQ, but it 
 
 PSLQ computes a matrix, _A<sub>k</sub>_, at every iteration _k_. This "_A_" is the same _A_ as in the PSLQ paper, in the invariants above and in the section below, "A Sharper Lower Bound on the Smallest Solution While PSLQ is Running" -- the "Sharper Bound" section for short. Here as in that section, the subscript _k_ is useful to track _A_ through different iterations _k_=1,2,3,... of PSLQ.
 
-Successive _A<sub>k</sub>_s get closer and closer to a change of basis, followed by a rotation and rounding, when applied to _S_. To see why, let
+Successive _A<sub>k</sub>_ s get closer and closer to a change of basis, followed by a rotation and rounding, when applied to _S_. To see why, let
 - (_H<sub>x</sub>_)_</sub>p</sub>_ be column _p_ of _H<sub>x</sub>_ for _p_=1,...,_n-1_
 - _m_ = &sum;<sub>p</sub> _y<sub>p</sub>(_H<sub>x</sub>_)<sub>_p_</sub> be an arbitrary element of _S_
 
@@ -59,27 +59,27 @@ Then _A<sub>k</sub>m_ = _H<sub>k</sub>(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)_
 
 ### Change of Basis
 
-The change of basis comes from the product _H<sub>x</sub><sup>t</sup>m_ in the right-hand side of equation 7. In the context of _Am_, _m_ is expressed in terms of the basis (e<sub>1</sub>, ..., e<sub>n</sub>). But _H<sub>x</sub><sup>t</sup>m)_ gives _m_ in terms of the basis (_(H<sub>x</sub>_)<sub>1</sub>, ..., _(H<sub>x</sub>_)<sub>n-1</sub>,). In other words,
+The change of basis comes from the product _H<sub>x</sub><sup>t</sup>m_ in the right-hand side of equation 7. In the context of _A<sub>k</sub>m_, _m_ is expressed in terms of the basis (e<sub>1</sub>, ..., e<sub>n</sub>). But _H<sub>x</sub><sup>t</sup>m)_ gives _m_ in terms of the basis (_(H<sub>x</sub>_)<sub>1</sub>, ..., _(H<sub>x</sub>_)<sub>n-1</sub>). In other words,
 
-_(H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ = _y<sub>i</sub>_ (equation 1)
+_(H<sub>x</sub><sup>t</sup>m)<sub>i</sub>_ = _y<sub>i</sub>_ (equation 1)
 
 The reason for this is that
 
-_H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>,
+_H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_,
 
 as noted in the section above on invariants. The following calculation uses this identity to prove equation 1:
 
-_(H<sub>x</sub><sup>t</sup>m)<sub>i</sub>_ = (_H<sub>x</sub><sup>t</sup> (&sum;<sub>p</sub> _y<sub>p</sub>_ (_H<sub>x</sub>_)<sub>_p_</sub>)<sub>i</sub>
+_(H<sub>x</sub><sup>t</sup>m)<sub>i</sub>_ = (_H<sub>x</sub><sup>t</sup>_ (&sum;<sub>p</sub> _y<sub>p</sub>_ (_H<sub>x</sub>_)<sub>_p_</sub>)<sub>i</sub>
 
-&nbsp;&nbsp;&nbsp;&nbsp; = (&sum;<sub>p</sub> _y<sub>p</sub>_ _H<sub>x</sub><sup>t</sup> (_H<sub>x</sub>_)<sub>_p_</sub>)<sub>i</sub>
+&nbsp;&nbsp;&nbsp;&nbsp; = (&sum;<sub>p</sub> _y<sub>p</sub>_ _H<sub>x</sub><sup>t</sup>_ (_H<sub>x</sub>_)<sub>_p_</sub>)<sub>i</sub>
 
 &nbsp;&nbsp;&nbsp;&nbsp; = _y<sub>i</sub>_
 
 ### Dilation and Rounding Error
 
-In equation 7, once _H<sub>x</sub><sup>t</sup>_ applies a change of basis to _m_, the result is rotated by a _Q<sub>k</sub>_, then dilated with error by _H<sub>k</sub>_. The dilation comes from the diagonal elements of _H<sub>k</sub>_, and the error comes from the off-diagonal elements -- including all of row _n_.
+In equation 7, once _H<sub>x</sub><sup>t</sup>_ applies a change of basis to _m_, the result is rotated by a _Q<sub>k</sub>_, then dilated with error by _H<sub>k</sub>_. The fact that _Q<sub>k</sub>_ is a rotation matrix is explained in the "Sharper Bound" section. The dilation comes from the diagonal elements of _H<sub>k</sub>_, and the error comes from the off-diagonal elements -- including all of row _n_.
 
-The error is necessary because the left-hand side of equation 7 is an integer matrix, so this error can be considered to be rounding. But this rounding error decreases with each iteration of the PSLQ algorithm, because _H<sub>k</sub>_ tends towards a diagonal matrix 
+Some error is necessary because the left-hand side of equation 7 is an integer matrix. This means that the error in the off-diagonal elements of _H<sub>k</sub>_ can be considered to be a rounding error. But this rounding error decreases with each iteration of the PSLQ algorithm, because _H<sub>k</sub>_ tends towards a diagonal matrix as _k_ increases.
 
 In summary, _Am_ is _m_ written as a combination of the columns of _H<sub>x</sub>_, rotated and dilated with rounding error.
 
