@@ -81,11 +81,11 @@ In equation 7, once _H<sub>x</sub><sup>t</sup>_ applies a change of basis to _m_
 
 Some error is necessary because the left-hand side of equation 7 is an integer matrix. This means that the error in the off-diagonal elements of _H<sub>k</sub>_ can be considered to be a rounding error. But this rounding error decreases with each iteration of the PSLQ algorithm, because _H<sub>k</sub>_ tends towards a diagonal matrix as _k_ increases.
 
-In summary, _A<sub>k</sub>_ is _m_ written as a combination of the columns of _H<sub>x</sub>_, rotated and dilated with rounding error.
+In summary, _A<sub>k</sub>m_ is _m_ written as a combination of the columns of _H<sub>x</sub>_, rotated and dilated with rounding error.
 
 ## A Sharper Lower Bound on the Smallest Solution While PSLQ is Running
 
-There is a sharper bound than 1/|_H_| on the size of a solution while the algorithm is running. This bound,
+There is a sharper bound than 1/|_H_| on the size of a solution while the algorithm is still running (i.e., when _H<sub>k</sub>_ has no 0s in its diagonal -- a fact used below). This bound,
 
 1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
 
@@ -127,6 +127,8 @@ _H<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>H<sub>k-1</sub>G<sub>k</sub>_
 Let _A<sub>k</sub>_ and _Q<sub>k</sub><sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>_, respectively, in equation 2:
 - _A<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>R<sub>k-1</sub>D<sub>k-1</sub>...R<sub>1</sub>D<sub>1</sub>
 - _Q<sub></sub>_ = (G<sub>1</sub>...G<sub>k-1</sub>G<sub>k</sub>)<sup>-1</sup>
+
+_A<sub>k</sub>_ is the same "_A_" as in the original PSLQ paper.
 
 ### The Bound
 
