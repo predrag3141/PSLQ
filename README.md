@@ -126,7 +126,7 @@ _H<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>H<sub>k-1</sub>G<sub>k</sub>_
 
 Let _A<sub>k</sub>_ and _Q<sub>k</sub><sup>-1</sup>_ be what lie to the left and right of _H<sub>x</sub>_, respectively, in equation 2:
 - _A<sub>k</sub>_ = _R<sub>k</sub>D<sub>k</sub>R<sub>k-1</sub>D<sub>k-1</sub>...R<sub>1</sub>D<sub>1</sub>_
-- _Q<sub></sub>_ = (_G<sub>1</sub>...G<sub>k-1</sub>G<sub>k</sub>_)_<sup>-1</sup>_
+- _Q<sub>k</sub>_ = (_G<sub>1</sub>...G<sub>k-1</sub>G<sub>k</sub>_)_<sup>-1</sup>_
 
 _A<sub>k</sub>_ is the same "_A_" as in the original PSLQ paper.
 
@@ -136,7 +136,7 @@ Computation of the bound mentioned at the beginning of this section,
 
 1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (equation 3),
 
-begins with the LQ decomposition of _A<sub></sub>H<sub>x</sub>_:
+begins with the LQ decomposition of _A<sub>k</sub>H<sub>x</sub>_:
 
 _H<sub>k</sub>_ = _A<sub>k</sub>H<sub>x</sub>Q<sup>-1</sup>_
 
