@@ -150,9 +150,9 @@ As noted earlier, the PSLQ paper defines a matrix _P_ = _H<sub>x</sub>H<sub>x</s
 
 _xm_ = 0 &rArr; _Pm_ = _m_ (equation 5)
 
-#### A Formula for _(A<sub>k</sub>)<sub>i,1</sub>_
+#### A Formula for _(A<sub>k</sub>m)<sub>i,1</sub>_
 
-From equation 5 comes the following proposition: If _(A<sub>k</sub>)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
+From equation 5 comes the following proposition: If _(A<sub>k</sub>m)<sub>p,1</sub>_ = 0 for _p_ &lt; _i_, then
 
 _(A<sub>k</sub>m)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (equation 6)
 
@@ -172,21 +172,21 @@ Using equation 7, we will now calculate _(A<sub>k</sub>m)<sub>i,1</sub>_, starti
 
 If _i_ = 1, then using equation 7 in the second line below,
 
-_(A<sub>k</sub>)<sub>i,1</sub>_ = _(A<sub>k</sub>)<sub>1,1</sub>_
+_(A<sub>k</sub>m)<sub>i,1</sub>_ = _(A<sub>k</sub>m)<sub>1,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>1,p</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>1,1</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ (equation 8)
 
-If _(A<sub>k</sub>)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
+If _(A<sub>k</sub>m)<sub>1,1</sub>_ = 0, we continue with _i_ = 2.
 
-0 = _(A<sub>k</sub>)<sub>1,1</sub>_ = _(H<sub>k</sub>)<sub>1,1</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_
+0 = _(A<sub>k</sub>m)<sub>1,1</sub>_ = _(H<sub>k</sub>)<sub>1,1</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_
 
 Since _H<sub>k</sub>_ has no 0s on its diagonal,
 
 _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = 0 (equation 9)
 
-_(A<sub>k</sub>)<sub>i,1</sub>_ = _(A<sub>k</sub>)<sub>2,1</sub>_
+_(A<sub>k</sub>m)<sub>i,1</sub>_ = _(A<sub>k</sub>m)<sub>2,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>2,p</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
@@ -194,15 +194,15 @@ _(A<sub>k</sub>)<sub>i,1</sub>_ = _(A<sub>k</sub>)<sub>2,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>2,2</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ (equation 10)
 
-If _(A<sub>k</sub>)<sub>1,1</sub>_ = _(A<sub>k</sub>)<sub>2,1</sub>_ = 0, we continue with _i_ = 3.
+If _(A<sub>k</sub>m)<sub>1,1</sub>_ = _(A<sub>k</sub>m)<sub>2,1</sub>_ = 0, we continue with _i_ = 3.
 
-0 = _(A<sub>k</sub>)<sub>2,1</sub>_ = _(H<sub>k</sub>)<sub>2,2</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
+0 = _(A<sub>k</sub>m)<sub>2,1</sub>_ = _(H<sub>k</sub>)<sub>2,2</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_
 
 From equation 9 and since _H<sub>k</sub>_ has no 0s on its diagonal,
 
 _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>1,1</sub>_ = _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>2,1</sub>_ = 0 (equation 11)
 
-_(A<sub>k</sub>)<sub>i,1</sub>_ = _(A<sub>k</sub>)<sub>3,1</sub>_
+_(A<sub>k</sub>m)<sub>i,1</sub>_ = _(A<sub>k</sub>m)<sub>3,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = &sum;<sub>p</sub> _(H<sub>k</sub>)<sub>3,p</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>p,1</sub>_
 
@@ -210,9 +210,9 @@ _(A<sub>k</sub>)<sub>i,1</sub>_ = _(A<sub>k</sub>)<sub>3,1</sub>_
 
 &nbsp;&nbsp;&nbsp;&nbsp; = _(H<sub>k</sub>)<sub>3,3</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>3,1</sub>_
 
-This reasoning continues until the first _i_ for which _(A<sub>k</sub>)<sub>i,1</sub>_ &ne; 0. The formula for _(A<sub>k</sub>)<sub>i,1</sub>_ is
+This reasoning continues until the first _i_ for which _(A<sub>k</sub>m)<sub>i,1</sub>_ &ne; 0. The formula for _(A<sub>k</sub>m)<sub>i,1</sub>_ is
 
-_(A<sub>k</sub>)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 6)
+_(A<sub>k</sub>m)<sub>i,1</sub>_ = _(H<sub>k</sub>)<sub>i,i</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_ (proving equation 6)
 
 #### Proof of the Bound
 
@@ -221,16 +221,16 @@ Recall that the bound to prove is
 1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (repeating equation 3)
 
 Let
-- _i_ be the smallest index for which _(A<sub>k</sub>)<sub>i,1</sub>_ &ne; 0
+- _i_ be the smallest index for which _(A<sub>k</sub>m)<sub>i,1</sub>_ &ne; 0
 - _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>)<sub>i</sub>_ denote row _i_ of _Q<sub>k</sub>H<sub>x</sub><sup>t</sup>_
 
 Note that
 - _A<sub>k</sub>_ and _m_ are non-zero integer matrices and _A<sub>k</sub>_ is non-singular, which makes the first line work in the calculation below
-- Equation 6 from the section, "A Formula for _(A<sub>k</sub>)<sub>i,1</sub>_", permits the replacement of _(A<sub>k</sub>)<sub>i,1</sub>_ in the second line below.
+- Equation 6 from the section, "A Formula for _(A<sub>k</sub>m)<sub>i,1</sub>_", permits the replacement of _(A<sub>k</sub>m)<sub>i,1</sub>_ in the second line below.
 - _Q<sub>k</sub>_ is a product of the inverses of matrices _G<sub>k</sub>_, defined in equations 10 through 15 of the original PSLQ paper. These equations define _G<sub>k</sub>_ as a rotation matrix. This makes _Q<sub>k</sub>_ a rotation matrix, which is one of two facts used in the fourth line below to conclude that the norm of a row in _Q<sub>k</sub>H<sub>x</sub><sup>t</sup>_ is 1.
 - _H<sub>x</sub><sup>t</sup>H<sub>x</sub>_ = _I<sub>n-1</sub>_, which is the second fact needed to conclude that the norm of a row in _Q<sub>k</sub>H<sub>x</sub><sup>t</sup>_ is 1.
 
-1 &le; |_(A<sub>k</sub>)<sub>i,1</sub>_|
+1 &le; |_(A<sub>k</sub>m)<sub>i,1</sub>_|
 
 &nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_ _(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)<sub>i,1</sub>_|
 
