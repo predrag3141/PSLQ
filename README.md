@@ -162,7 +162,7 @@ _A<sub>k</sub>m_ = _A<sub>k</sub>Pm_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _A<sub>k</sub>(H<sub>x</sub>H<sub>x</sub><sup>t</sup>)m_
 
-&nbsp;&nbsp;&nbsp;&nbsp;= _(AH<sub>x</sub>)(H<sub>x</sub><sup>t</sup>m)_
+&nbsp;&nbsp;&nbsp;&nbsp;= _(A<sub>k</sub>H<sub>x</sub>)(H<sub>x</sub><sup>t</sup>m)_
 
 &nbsp;&nbsp;&nbsp;&nbsp;= _(H<sub>k</sub>Q)(H<sub>x</sub><sup>t</sup>m)_
 
