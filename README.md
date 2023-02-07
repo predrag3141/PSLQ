@@ -51,15 +51,15 @@ So what is presented in detail here is not *the* geometric view of PSLQ, but it 
 
 PSLQ computes a matrix, _A<sub>k</sub>_, at every iteration _k_. This "_A_" is the same _A_ as in the PSLQ paper, in the invariants above and in the section below, "A Sharper Lower Bound on the Smallest Solution While PSLQ is Running" -- the "Sharper Bound" section for short. Here as in that section, the subscript _k_ is useful to track _A_ through different iterations _k_=1,2,3,... of PSLQ.
 
-Successive _A<sub>k</sub>_ s get closer and closer to a change of basis, followed by a rotation and rounding, when applied to _S_. To see why, let
-- (_H<sub>x</sub>_)_</sub>p</sub>_ be column _p_ of _H<sub>x</sub>_ for _p_=1,...,_n-1_
-- _m_ = &sum;<sub>p</sub> _y<sub>p</sub>(_H<sub>x</sub>_)<sub>_p_</sub> be an arbitrary element of _S_
+Successive _A<sub>k</sub>_ get closer and closer to a change of basis, followed by a rotation and rounding, when applied to _S_. To see why, let
+- (_H<sub>x</sub>_)_<sub>p</sub>_ be column _p_ of _H<sub>x</sub>_ for _p_=1,...,_n-1_
+- _m_ = &sum;<sub>p</sub> _y<sub>p</sub>_ (_H<sub>x</sub>_)<sub>_p_</sub> be an arbitrary element of _S_
 
 Then _A<sub>k</sub>m_ = _H<sub>k</sub>(Q<sub>k</sub>H<sub>x</sub><sup>t</sup>m)_ (equation 7 from the "Sharper Bound" section)
 
 ### Change of Basis
 
-The change of basis comes from the product _H<sub>x</sub><sup>t</sup>m_ in the right-hand side of equation 7. In the context of _A<sub>k</sub>m_, _m_ is expressed in terms of the basis (e<sub>1</sub>, ..., e<sub>n</sub>). But _H<sub>x</sub><sup>t</sup>m)_ gives _m_ in terms of the basis (_(H<sub>x</sub>_)<sub>1</sub>, ..., _(H<sub>x</sub>_)<sub>n-1</sub>). In other words,
+The change of basis comes from the product _H<sub>x</sub><sup>t</sup>m_ in the right-hand side of equation 7. In the context of _A<sub>k</sub>m_, _m_ is expressed in terms of the basis (e<sub>1</sub>, ..., e<sub>n</sub>). But _H<sub>x</sub><sup>t</sup>m_ gives _m_ in terms of the basis (_(H<sub>x</sub>_)<sub>1</sub>, ..., _(H<sub>x</sub>_)<sub>n-1</sub>). In other words,
 
 _(H<sub>x</sub><sup>t</sup>m)<sub>i</sub>_ = _y<sub>i</sub>_ (equation 1)
 
@@ -77,7 +77,7 @@ _(H<sub>x</sub><sup>t</sup>m)<sub>i</sub>_ = (_H<sub>x</sub><sup>t</sup>_ (&sum;
 
 ### Dilation and Rounding Error
 
-In equation 7, once _H<sub>x</sub><sup>t</sup>_ applies a change of basis to _m_, the result is rotated by a _Q<sub>k</sub>_, then dilated with error by _H<sub>k</sub>_. The fact that _Q<sub>k</sub>_ is a rotation matrix is explained in the "Sharper Bound" section. The dilation comes from the diagonal elements of _H<sub>k</sub>_, and the error comes from the off-diagonal elements -- including all of row _n_.
+In equation 7, once _H<sub>x</sub><sup>t</sup>_ applies a change of basis to _m_, the result is rotated by _Q<sub>k</sub>_, then dilated with error by _H<sub>k</sub>_. The fact that _Q<sub>k</sub>_ is a rotation matrix is explained in the "Sharper Bound" section. The dilation comes from the diagonal elements of _H<sub>k</sub>_, and the error comes from the off-diagonal elements -- including all of row _n_ (so there are really just _n-1_ meaningful entries in _A<sub>k</sub>m_).
 
 Some error is necessary because the left-hand side of equation 7 is an integer matrix. This means that the error in the off-diagonal elements of _H<sub>k</sub>_ can be considered to be a rounding error. But this rounding error decreases with each iteration of the PSLQ algorithm, because _H<sub>k</sub>_ tends towards a diagonal matrix as _k_ increases.
 
