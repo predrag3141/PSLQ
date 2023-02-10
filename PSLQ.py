@@ -34,7 +34,7 @@ def testEqual2D(numpyMatrix_in, plainList_in, leftSide_in, rightSide_in, errThre
         print("       Hit <Enter> to continue.")
         input()
 
-def printFloatMatrix(matrix_in, name_in):
+def printMatrix(matrix_in, name_in):
     print("==========", name_in + ":")
     numRows = len(matrix_in)
     for i in range(numRows):
@@ -45,16 +45,22 @@ def printFloatMatrix(matrix_in, name_in):
             # print('{:10.2} '.format(matrix_in[i][j]), end='')
         print()
 
-def printIntMatrix(matrix_in, name_in):
-    print("==========", name_in + ":")
+def printDiagonal(matrix_in, name_in):
     numRows = len(matrix_in)
-    for i in range(numRows):
+    maxDiagonalElement = abs(matrix_in[0][0])
+    minDiagonalElement = maxDiagonalElement
+    for i in range(1, numRows):
         numColumns = len(matrix_in[i])
-        print("  ", end='')
-        for j in range(numColumns):
-            print(matrix_in[i][j], " ", end='')
-            # print('{:-10} '.format(matrix_in[i][j]), end='')
-        print()
+        if i < numColumns:
+            testValue = abs(matrix_in[i][i])
+            if testValue > maxDiagonalElement:
+                maxDiagonalElement = testValue
+            if testValue < minDiagonalElement:
+                minDiagonalElement = testValue
+    print("==========", name_in + ":")
+    print("           max diagonal element:", maxDiagonalElement)
+    print("           min diagonal element:", minDiagonalElement)
+    print("           ratio:", maxDiagonalElement / minDiagonalElement)
 
 def nint(a_in):
     if a_in > 0:
@@ -72,7 +78,7 @@ def getNormalizedX(x_in, n_in):
 
 def indexOfWeightedMax(H_in, gamma_in, n_in):
     rval          = 0
-    maxOnDiagonal = H_in[0][0]
+    maxOnDiagonal = abs(H_in[0][0])
     powerOfGamma  = gamma_in
     for i in range(1, n_in - 1):
         testValue = powerOfGamma *  abs(H_in[i][i])
@@ -266,20 +272,21 @@ def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in)
         testEqual1D(matmul(x_1xn, H0_nxnm1),               zero,  "xH0",       "0", errThresh_in)
         testEqual1D([abs(det(array(A)))],                  [1],   "|A|",       "1", errThresh_in)
         testEqual1D([abs(det(array(B)))],                  [1],   "|B|",       "1", errThresh_in)
-        printFloatMatrix(D0, "D0")
-        printIntMatrix(D, "D")
-        printFloatMatrix(H, "H")
+        printDiagonal(H, "H")
 
         # Increment the number of iterations
         #
         numIterations += 1
+
+    # Print the result
+    printMatrix(B, "B")
 
 # Inputs
 # unnormalizedX = [2, 3, -5]
 unnormalizedX = [1, 2.71828, 3.14159]
 errThresh = 0.00001
 gamma = sqrt(4/3)
-iteratioinAfterWhichToStop = 10
+iteratioinAfterWhichToStop = 15
 iterationAfterWhichToDisplay = [2]
 
 # Run the algorithm
