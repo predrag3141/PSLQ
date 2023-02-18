@@ -89,7 +89,7 @@ There is a sharper bound than 1/|_H_| on the size of a solution while the algori
 
 1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
 
-is found on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https://www.cmor-faculty.rice.edu/~cox/lais/bundle.pdf) by Steven J. Cox. This is a textbook that covers many topics, including QR decomposition. QR decomposition is the same as LQ decomposition, used in PSLQ, except every matrix is transposed. Because the overall topic is QR decomposition in this work, every matrix in the PSLQ algorithm is transposed there; and many are renamed. In what follows, the argument in "Linear Algebra in Situ" is repeated here, but in the LQ context, using similar names to those in the original PSLQ paper and in the source code, `PSLQ.py`.
+is found, among other places, on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https://www.cmor-faculty.rice.edu/~cox/lais/bundle.pdf) by Steven J. Cox. This is a textbook that covers many topics, including QR decomposition. QR decomposition is the same as LQ decomposition, used in PSLQ, except every matrix is transposed. Because the overall topic is QR decomposition in this work, every matrix in the PSLQ algorithm is transposed there; and many are renamed. In what follows, the argument in "Linear Algebra in Situ" is repeated here, but in the LQ context, using similar names to those in the original PSLQ paper and in the source code, `PSLQ.py`.
 
 ### Notation
 
@@ -239,3 +239,20 @@ Note that
 &nbsp;&nbsp;&nbsp;&nbsp; = |_(H<sub>k</sub>)<sub>i,i</sub>_| |_m_|
 
 &nbsp;&nbsp;&nbsp;&nbsp; &le; max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) |_m_| (proving equation 3)
+
+## When a Row Swap Reduces the Maximum Diagonal Element
+
+As seen in the previous section, "A Sharper Lower Bound on the Smallest Solution While PSLQ is Running", reducing the maximum diagonal element of _H<sub>k</sub>_ sharpens the bound on the smallest solution _m_ to the integer relation problem, <_x_,_m_> = 0. This raises the question, when would a given row swap reduce the maximum diagonal element of _H<sub>k</sub>_ and thereby reduce this lower bound?
+
+### Notation
+
+Following the notation in a [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf), by the same authors as the [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf), the two rows and columns involved in both the row swap and corner steps of an iteration of PSLQ are
+
+<table border="10"
+       style="background-color: aqua; border-color: red blue gold teal;">
+
+   <tr> <td>X</td> <td>X</td> <td>X</td> </tr>
+   <tr> <td>X</td> <td>X</td> <td>X</td> </tr>
+   <tr> <td>X</td> <td>X</td> <td>X</td> </tr>
+</table>
+

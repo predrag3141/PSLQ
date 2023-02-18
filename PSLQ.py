@@ -46,21 +46,17 @@ def printMatrix(matrix_in, name_in):
         print()
 
 def printDiagonal(matrix_in, name_in):
-    numRows = len(matrix_in)
-    maxDiagonalElement = abs(matrix_in[0][0])
-    minDiagonalElement = maxDiagonalElement
-    for i in range(1, numRows):
-        numColumns = len(matrix_in[i])
-        if i < numColumns:
-            testValue = abs(matrix_in[i][i])
-            if testValue > maxDiagonalElement:
-                maxDiagonalElement = testValue
-            if testValue < minDiagonalElement:
-                minDiagonalElement = testValue
-    print("==========", name_in + ":")
-    print("           max diagonal element:", maxDiagonalElement)
-    print("           min diagonal element:", minDiagonalElement)
-    print("           ratio:", maxDiagonalElement / minDiagonalElement)
+    minDiagonalElement = abs(matrix_in[0][0])
+    diagonal = [matrix_in[0][0]]
+    for i in range(1, len(matrix_in)):
+        if i < len(matrix_in[i]):
+            diagonal.append(matrix_in[i][i])
+            if abs(matrix_in[i][i]) < minDiagonalElement:
+                minDiagonalElement = abs(matrix_in[i][i])
+    powerOf10 = 100
+    while minDiagonalElement * powerOf10 < 100: powerOf10 *= 10
+    diagonal = [int(diagonal[i] * powerOf10) for i in range(len(diagonal))]
+    print("Diagonal of ", name_in, "~", 1/powerOf10, diagonal)
 
 def nint(a_in):
     if a_in > 0:
@@ -200,7 +196,7 @@ def getE(D_in, n_in):
     E = [[nint(E_nxn[i, j]) for j in range(n_in)] for i in range(n_in)]
     return E
 
-def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in):
+def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in, checkInvariants_in):
 
     # Initializations
     n = len(unnormalizedX_in)
@@ -223,16 +219,20 @@ def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in)
         # Page 5: "Replace H by DH."
         #
         D, D0 = getD(H, n)
+        printMatrix(D, "D from step 1 =")
         HDiagonal = [[H[i][j] if i == j else 0 for j in range(n - 1)] for i in range(n)]
-        testEqual2D(matmul(array(D0), array(H)), HDiagonal, "D0 H", "diagonal of H", errThresh_in)
+        if checkInvariants:
+            testEqual2D(matmul(array(D0), array(H)), HDiagonal, "D0 H", "diagonal of H", errThresh_in)
         DH_nxnm1 = matmul(array(D), array(H))
         H = [[DH_nxnm1[i, j] for j in range(n - 1)] for i in range(n)]
+        printDiagonal(H, "H after step 1")
+        printMatrix(H, "H after step 1")
 
         # Page 5: "Select an integer j, [0 <= j < n − 1 in our zero-based indexing]
         #         such that gamma^j |H[j][j]| >= gamma^i |H[i][i]| for all i,
         #         [0 <= i < n − 1 in our indexing]
         j = indexOfWeightedMax(H, gamma_in, n)
-        print("j:", j)
+        print("Step 2: j =", j)
 
         # Page 5: "Replace H by R(j)HG(j), A by R(j)DA and B by BER(j)"
         #
@@ -244,6 +244,8 @@ def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in)
         R_nxn = array(R)
         RHG_nxnm1 = matmul(matmul(R_nxn, array(H)), array(G))
         H = [[RHG_nxnm1[i, j] for j in range(n - 1)] for i in range(n)]
+        printDiagonal(H, "H after step 3")
+        printMatrix(H, "H after step 3")
         RD_nxn = matmul(R_nxn, array(D))
         RDA_nxn = matmul(RD_nxn, array(A))
         A = [[nint(RDA_nxn[i, j]) for j in range(n)] for i in range(n)]
@@ -251,6 +253,11 @@ def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in)
         BE_nxn = matmul(array(B), array(E))
         BER_nxn = matmul(BE_nxn, R_nxn)
         B = [[nint(BER_nxn[i, j]) for j in range(n)] for i in range(n)]
+
+        # Increment the number of iterations before checking invariants in case
+        # we are not checking them, because in that case the loop terminates.
+        #
+        numIterations += 1
 
         # Invatiants to check (here I is the identity matrix):
         # - (D0 H)[i][j] = H[i][j] if i = j, else 0
@@ -260,6 +267,7 @@ def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in)
         # - xBH = x B A H0 = x H0 should be the 1 x n-1 zero vector (two tests)
         # - det(A) - 1 = det(B) - 1 = 0
         #
+        if not checkInvariants_in: continue
         I_nm1  = getIdentity(n-1)
         I_n    = getIdentity(n)
         xB_1xn = matmul(x_1xn, array(B))
@@ -272,11 +280,6 @@ def run(unnormalizedX_in, errThresh_in, gamma_in, iteratioinAfterWhichToStop_in)
         testEqual1D(matmul(x_1xn, H0_nxnm1),               zero,  "xH0",       "0", errThresh_in)
         testEqual1D([abs(det(array(A)))],                  [1],   "|A|",       "1", errThresh_in)
         testEqual1D([abs(det(array(B)))],                  [1],   "|B|",       "1", errThresh_in)
-        printDiagonal(H, "H")
-
-        # Increment the number of iterations
-        #
-        numIterations += 1
 
     # Print the result
     printMatrix(B, "B")
@@ -288,6 +291,7 @@ errThresh = 0.00001
 gamma = sqrt(4/3)
 iteratioinAfterWhichToStop = 15
 iterationAfterWhichToDisplay = [2]
+checkInvariants = False
 
 # Run the algorithm
-run(unnormalizedX, errThresh, gamma, iteratioinAfterWhichToStop)
+run(unnormalizedX, errThresh, gamma, iteratioinAfterWhichToStop, checkInvariants)
