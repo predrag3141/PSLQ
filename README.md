@@ -248,11 +248,7 @@ As seen in the previous section, "A Sharper Lower Bound on the Smallest Solution
 
 Following the notation in a [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf), by the same authors as the [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf), the two rows and columns involved in both the row swap and corner steps of an iteration of PSLQ are
 
-<table border="1"
-       style="border-color: black;">
-
-   <tr> <td>X</td> <td>X</td> <td>X</td> </tr>
-   <tr> <td>X</td> <td>X</td> <td>X</td> </tr>
-   <tr> <td>X</td> <td>X</td> <td>X</td> </tr>
+<table border="1" style="border-color: black;">
+   <tr> <td>&Alpha;</td> <td>0</td>        </tr>
+   <tr> <td>&Beta;</td>  <td>&Lambda;</td> </tr>
 </table>
-
