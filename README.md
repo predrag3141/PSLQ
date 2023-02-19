@@ -255,7 +255,7 @@ Following the notation in a [1999 paper analyzing PSLQ](https://www.ams.org/jour
                         </table>
 </div>
 
-The 1999 paper also defines _&delta;_ = sqrt(_&beta;<sup>2</sup>_ + _&lambda;<sup>2</sup>_).
+The 1999 paper also defines &delta; = sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>).
 
 ### Formula for Row Swap and Cornering
 
@@ -263,7 +263,7 @@ The 1999 paper analyzing PSLQ derives the formula
 
 <div>
 &Lambda;<sub>1</sub> = <table border="1" style="border-color: black;">
-                         <tr> <td>&delta_              </td> <td>0                          </td> </tr>
+                         <tr> <td>&delta;              </td> <td>0                          </td> </tr>
                          <tr> <td>&alpha;&beta;/&delta;</td> <td>-&alpha; &lambda; / &delta;</td> </tr>
                        </table>
 </div>
@@ -272,8 +272,8 @@ for the result of the row swap and cornering. Up to absolute value, &Lambda;<sub
 
 <div>
 <table border="1" style="border-color: black;">
-   <tr> <td> |&delta / &alpha;| </td> <td>0                 </td> </tr>
-   <tr> <td> 0                  </td> <td>|&alpha; / &delta|</td> </tr>
+   <tr> <td> |&delta; / &alpha;| </td> <td>0                  </td> </tr>
+   <tr> <td> 0                   </td> <td>|&alpha; / &delta;|</td> </tr>
 </table>
 </div>
 
