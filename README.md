@@ -307,7 +307,7 @@ For the reverse direction, assume equation 13. Then since |&alpha;| > |&delta;|,
 
 Therefore,
 
-max(|&delta;|, |&alpha; &lambda; / &delta;|) > max(|&delta;|, |&lambda;|)
+max(|&delta;|, |&alpha; &lambda; / &delta;|) &ge; max(|&delta;|, |&lambda;|)
 
 &nbsp;&nbsp;&nbsp;&nbsp; = max(sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>), |&lambda;|)
 
