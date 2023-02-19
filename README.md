@@ -289,7 +289,7 @@ The row swap and corner steps reduce the maximum diagonal element if and only if
 
 To prove this, first assume equation 12 and argue for equation 13. Equation 12 precludes the possibility that |&alpha;| < |&lambda;|, since
 
-|&alpha;| < |&lambda;| &rArr;  |&lambda;| = max(|&alpha;|, |&lambda;|) > max(|&delta;|, |&alpha; &lambda; / &delta;|) &ge; |&delta;| &ge; |&lambda;|, a contradiction.
+|&alpha;| < |&lambda;| &rArr;  |&lambda;| = max(|&alpha;|, |&lambda;|) > max(|&delta;|, |&alpha; &lambda; / &delta;|) &ge; |&delta;| = sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>) &ge; |&lambda;|, a contradiction.
 
 Therefore, |&alpha;| &ge; |&lambda;|. Using equation 12,
 
