@@ -263,8 +263,8 @@ The 1999 paper analyzing PSLQ derives the formula
 
 <div>
 &Lambda;<sub>1</sub> = <table border="1" style="border-color: black;">
-                         <tr> <td>&delta;              </td> <td>0                          </td> </tr>
-                         <tr> <td>&alpha;&beta;/&delta;</td> <td>-&alpha; &lambda; / &delta;</td> </tr>
+                         <tr> <td>&delta;                 </td> <td>0                          </td> </tr>
+                         <tr> <td>&alpha; &beta; / &delta;</td> <td>-&alpha; &lambda; / &delta;</td> </tr>
                        </table>
 </div>
 
@@ -279,3 +279,48 @@ for the result of the row swap and cornering. Up to absolute value, &Lambda;<sub
 
 ### Criterion for Reducing the Larger Diagonal Element
 
+The row swap and corner steps can be considered to reduce the maximum diagonal element if
+
+max(|&delta;|, |&alpha; &lambda; / &delta;|) < max(|&alpha;|, |&lambda;|) (equation 12)
+
+The row swap and corner steps reduce the maximum diagonal element if and only if
+
+|&alpha;| > |&delta;| > |&lambda;| (equation 13)
+
+To prove this, first assume equation 12 and argue for equation 13. Equation 12 precludes the possibility that |&alpha;| < |&lambda;|, since
+
+|&alpha;| < |&lambda;| &rArr;  |&lambda;| = max(|&alpha;|, |&lambda;|) > max(|&delta;|, |&alpha; &lambda; / &delta;|) &ge; |&delta;| &ge; |&lambda;|, a contradiction.
+
+Therefore, |&alpha;| &ge; |&lambda;|. Using equation 12,
+
+|&alpha;| = max(|&alpha;|, |&lambda;|) > max(|&delta;|, |&alpha; &lambda; / &delta;|)
+
+&nbsp; &nbsp; &nbsp; &nbsp; &hArr; |&alpha;| > |&delta;| and |&alpha;| > |&alpha;&lambda; / &delta;|
+
+&nbsp; &nbsp; &nbsp; &nbsp; &hArr; |&alpha;| > |&delta;| and 1 > |&lambda; / &delta;|
+
+&nbsp; &nbsp; &nbsp; &nbsp; &hArr; |&alpha;| > |&delta;| and |&delta;| > |&lambda;| (equation 13)
+
+For the reverse direction, assume equation 13. Then since |&alpha;| > |&delta;|
+
+|&alpha; &lambda; / &delta;| > |&delta; &lambda; / &delta;| = |&lambda;|
+
+Therefore,
+
+max(|&delta;|, |&alpha; &lambda; / &delta;|) > max(|&delta;|, |&lambda|)
+
+&nbsp;&nbsp;&nbsp;&nbsp; = max(sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>), |&lambda|)
+
+&nbsp;&nbsp;&nbsp;&nbsp; = sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>)
+
+&nbsp;&nbsp;&nbsp;&nbsp; = |&delta;| (equation 14)
+
+Equation 14 selects which of max(|&delta;|, |&alpha; &lambda; / &delta;|) is the maximum, namely
+
+max(|&delta;|, |&alpha; &lambda; / &delta;|) = |&alpha; &lambda; / &delta;| (equation 15)
+
+Using equation 15 and the fact from the premise, equation 13, that |&lambda;| < |&delta;|,
+
+max(|&delta;|, |&alpha; &lambda; / &delta;|) = |&alpha; &lambda; / &delta;| < |&alpha| &le; max(|&alpha|, |&lambda;|) (equation 16)
+
+Equation 16 proves equation 12.
