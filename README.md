@@ -299,17 +299,17 @@ Therefore, |&alpha;| &ge; |&lambda;|. Using equation 12,
 
 &nbsp; &nbsp; &nbsp; &nbsp; &hArr; |&alpha;| > |&delta;| and 1 > |&lambda; / &delta;|
 
-&nbsp; &nbsp; &nbsp; &nbsp; &hArr; |&alpha;| > |&delta;| and |&delta;| > |&lambda;| (equation 13)
+&nbsp; &nbsp; &nbsp; &nbsp; &hArr; |&alpha;| > |&delta;| and |&delta;| > |&lambda;| (a restatement of equation 13)
 
-For the reverse direction, assume equation 13. Then since |&alpha;| > |&delta;|
+For the reverse direction, assume equation 13. Then since |&alpha;| > |&delta;|,
 
 |&alpha; &lambda; / &delta;| > |&delta; &lambda; / &delta;| = |&lambda;|
 
 Therefore,
 
-max(|&delta;|, |&alpha; &lambda; / &delta;|) > max(|&delta;|, |&lambda|)
+max(|&delta;|, |&alpha; &lambda; / &delta;|) > max(|&delta;|, |&lambda;|)
 
-&nbsp;&nbsp;&nbsp;&nbsp; = max(sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>), |&lambda|)
+&nbsp;&nbsp;&nbsp;&nbsp; = max(sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>), |&lambda;|)
 
 &nbsp;&nbsp;&nbsp;&nbsp; = sqrt(&beta;<sup>2</sup> + &lambda;<sup>2</sup>)
 
@@ -321,6 +321,6 @@ max(|&delta;|, |&alpha; &lambda; / &delta;|) = |&alpha; &lambda; / &delta;| (equ
 
 Using equation 15 and the fact from the premise, equation 13, that |&lambda;| < |&delta;|,
 
-max(|&delta;|, |&alpha; &lambda; / &delta;|) = |&alpha; &lambda; / &delta;| < |&alpha| &le; max(|&alpha|, |&lambda;|) (equation 16)
+max(|&delta;|, |&alpha; &lambda; / &delta;|) = |&alpha; &lambda; / &delta;| < |&alpha;| &le; max(|&alpha;|, |&lambda;|) (equation 16)
 
 Equation 16 proves equation 12.
