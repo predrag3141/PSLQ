@@ -248,7 +248,36 @@ As seen in the previous section, "A Sharper Lower Bound on the Smallest Solution
 
 Following the notation in a [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf), by the same authors as the [original PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf), the two rows and columns involved in both the row swap and corner steps of an iteration of PSLQ are
 
+_&Lambda;<sub>0</sub>_ = <table border="1" style="border-color: black;">
+                           <tr> <td>&alpha;</td> <td>0</td>        </tr>
+                           <tr> <td>&beta;</td>  <td>&lambda;</td> </tr>
+                         </table>
+
+The 1999 paper also defines _&delta;_ = sqrt(_&beta;<sup>2</sup>_ + _&lambda;<sup>2</sup>_).
+
+### Formula for Row Swap and Cornering
+
+
+The 1999 paper analyzing PSLQ derives the formula
+
+_&Lambda;<sub>1</sub>_ = <table border="1" style="border-color: black;">
+                           <tr> <td>_&delta_               </td> <td>0                             </td> </tr>
+                           <tr> <td>_&alpha;&beta;/&delta;_</td> <td>-_&alpha; &lambda; / &delta;_ </td> </tr>
+                         </table>
+
+for the result of the row swap and cornering. Up to absolute value, _&Lambda;<sub>1</sub>_ is obtained by left-multiplying _&Lambda;<sub>0</sub>_ by
+
 <table border="1" style="border-color: black;">
-   <tr> <td>&alpha;</td> <td>0</td>        </tr>
-   <tr> <td>&beta;</td>  <td>&lambda;</td> </tr>
+   <tr> <td>|_&delta / &alpha;_| </td> <td>0                   </td> </tr>
+   <tr> <td>0                  </td>   <td>|_&alpha; / &delta_|</td> </tr>
 </table>
+
+
+
+
+
+
+### Criterion for Reducing the Larger Diagonal Element
+
+
+
