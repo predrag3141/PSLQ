@@ -53,111 +53,57 @@
 #
 from math import sqrt, gcd
 
-def updateDeltaSquared(best_in, alpha_in, a_in, b_in, u_in, v_in, lastContributors_in, thresholdRatio_in):
+def updateDeltaSquared(best_in, alpha_in, a_in, b_in, u_in, v_in):
+    # It was initially thought that deltaSquared could be too small, i.e.
+    #
+    # |new max diagonal element| / |new min diagonal element| >
+    # |old max diagonal element| / |old min diagonal element|
+    #
+    # But the above condition leads to a contradction where a = 0 and b = 0
+    # and the row operation is a left-multiply by the zero matrix, because
+    # if the max diagonal element moves,
+    #
+    # |new max diagonal element| = |alpha lamda / delta|
+    # |new min diagonal element| = |delta|
+    # |old max diagonal element| = |alpha|
+    # |old min diagonal element| = |lamda|
+    #
+    # |new max diagonal element| / |new min diagonal element| >
+    # |old max diagonal element| / |old min diagonal element|
+    #
+    # <=> |alpha lamda / delta| / |delta| > |alpha| / |lamda|
+    # <=> |lamda / delta| / |delta| > 1 / |lamda|
+    # <=> |lamda^2 / delta| / |delta| > 1
+    # <=> lamda^2 / delta^2 > 1
+    # <=> lamda^2 > delta^2
+    # <=> |lamda| > |delta|
+    #  => b = 0 and |lamda| > |a alpha + b beta|
+    #  => b = 0 and |lamda| > |a alpha| (since b = 0)
+    #  => b = 0 and a = 0 (since a is an integer and |alpha| > |lamda|)
+    #
+    # The above proof by contradiction that delta^2 can't be too small
+    # means that is safe to simply minimize delta^2, which is what this
+    # function does.
+    #
     aAlphaPlusBBeta = (a_in * alpha_in) + (b_in * u_in * alpha_in)
     lamda = v_in * alpha_in
     bLamda = b_in * lamda
     deltaSquared = (
       (aAlphaPlusBBeta * aAlphaPlusBBeta) + (bLamda * bLamda)
     )
-    alphaLamda = abs(alpha_in * lamda)
-    alphaSquared = alpha_in * alpha_in
     if best_in["DeltaSquared"] is None:
         return {
           "DeltaSquared": deltaSquared,
           "A": a_in,
           "B": b_in
-        }, None
-
-    # Compute whether best_in["DeltaSquared"] is below, in or above the
-    # ideal range. Ensure consistency with the decision from the previous
-    # call to this function with a different alpha, if it's a close call.
-    #
-    if (best_in["DeltaSquared"] < alphaLamda):
-        rangeOfBest = -1
-    elif (best_in["DeltaSquared"] < alphaSquared):
-        rangeOfBest = 0
-    else: rangeOfBest = 1
-    if lastContributors_in is not None:
-        if lastContributors_in["rangeOfBest"] != rangeOfBest:
-            if (
-              max(
-                best_in["DeltaSquared"] / alphaLamda,
-                alphaLamda / best_in["DeltaSquared"]
-              ) < thresholdRatio_in
-            ) or (
-              max(
-                best_in["DeltaSquared"] / alphaSquared,
-                alphaSquared / best_in["DeltaSquared"]
-              ) < thresholdRatio_in
-            ):
-                rangeOfBest = lastContributors_in["rangeOfBest"]
-                # print("made rangeOfBest consistent")
-
-    # Compute whether deltaSquared is below, in or above the ideal range.
-    # Ensure consistency with the decision from the previous call to this
-    # function with a different alpha, if it's a close call.
-    #
-    if (deltaSquared < alphaLamda):
-        rangeOfThis = -1
-    elif (deltaSquared < alphaSquared):
-        rangeOfThis = 0
-    else: rangeOfThis = 1
-    if lastContributors_in is not None:
-        if lastContributors_in["rangeOfThis"] != rangeOfThis:
-            if (
-              max(deltaSquared / alphaLamda, alphaLamda / deltaSquared) <
-              thresholdRatio_in
-            ) or (
-              max(deltaSquared / alphaSquared, alphaSquared / deltaSquared) <
-              thresholdRatio_in
-            ):
-                rangeOfThis = lastContributors_in["rangeOfThis"]
-                # print("made rangeOfThis consistent")
-
-    # Compute whether deltaSquared is below bestIn["DeltaSquared"].
-    # Ensure consistency with the decision from the previous call to this
-    # function with a different alpha, if it's a close call.
-    #
-    if (deltaSquared <  best_in["DeltaSquared"]):
-        thisIsLess = True
-    else: thisIsLess = False
-    if lastContributors_in is not None:
-        if lastContributors_in["thisIsLess"] != thisIsLess:
-            if max(
-              deltaSquared / best_in["DeltaSquared"],
-              best_in["DeltaSquared"] / deltaSquared
-            ) < thresholdRatio_in:
-                thisIsLess = lastContributors_in["thisIsLess"]
-                # print("made thisIsLess consistent")
-
-    # Use the three contributors -- rangeOfBest, rangeOfThis and thisIsLess --
-    # to decide whether to update the best a and b.
-    #
-    if (rangeOfBest == -1) and (rangeOfThis == -1): update = (not thisIsLess)
-    if (rangeOfBest == -1) and (rangeOfThis == 0): update = True
-    if (rangeOfBest == -1) and (rangeOfThis == 1): update = False
-    if (rangeOfBest == 0) and (rangeOfThis == -1): update = False
-    if (rangeOfBest == 0) and (rangeOfThis == 0): update = thisIsLess
-    if (rangeOfBest == 0) and (rangeOfThis == 1): update = False
-    if (rangeOfBest == 1) and (rangeOfThis == -1): update = True
-    if (rangeOfBest == 1) and (rangeOfThis == 0): update = True
-    if (rangeOfBest == 1) and (rangeOfThis == 1): update = thisIsLess
-    if update:
+        }
+    if deltaSquared < best_in["DeltaSquared"]:
         return {
           "DeltaSquared": deltaSquared,
           "A": a_in,
           "B": b_in
-        }, {
-          "rangeOfBest": rangeOfBest,
-          "rangeOfThis": rangeOfThis,
-          "thisIsLess": thisIsLess
         }
-    return best_in, {
-      "rangeOfBest": rangeOfBest,
-      "rangeOfThis": rangeOfThis,
-      "thisIsLess": thisIsLess
-    }
+    return best_in
 
 # Any time a and b come out different for different alpha, recompute delta^2
 # for both choices of a and b, for both values of alpha. If the ratio of the
@@ -329,10 +275,6 @@ def run(many_in, maxAB_in, thresholdRatio_in):
               {"DeltaSquared": None, "A": None, "B": None} 
               for j in range(len(alpha))
             ]
-            lastContributors = [
-              [None for j in range(2 * maxAB_in + 1)]
-              for i in range(2 * maxAB_in + 1)
-            ]
             for alphaIndex in range(len(alpha)):
                 for a in range(-maxAB_in, maxAB_in + 1):
                     for b in range(-maxAB_in, maxAB_in + 1):
@@ -349,12 +291,9 @@ def run(many_in, maxAB_in, thresholdRatio_in):
                             continue
 
                         # It is now safe to update the best a and b
-                        best[alphaIndex], lastContributors[a + maxAB_in][b + maxAB_in] = \
-                          updateDeltaSquared(
-                            best[alphaIndex], alpha[alphaIndex], a, b, u, v,
-                            lastContributors[a + maxAB_in][b + maxAB_in],
-                            thresholdRatio_in
-                          )
+                        best[alphaIndex] = updateDeltaSquared(
+                          best[alphaIndex], alpha[alphaIndex], a, b, u, v
+                        )
 
             # Getting past the next two lines every time shows that the best
             # row operation is independent of alpha, at least for every
