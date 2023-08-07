@@ -1,13 +1,3 @@
-<html>
-   <style>
-      h1 {text-align: center;}
-      h2 {text-align: center;}
-      p {text-align: left;}
-      div {text-align: left;}
-      td {text-align: center;}
-   </style>
-</html>
-
 # Introduction
 
 This repository contains a golang implementation of the PSLQ Algorithm as described in [original 1992 PSLQ paper](https://www.davidhbailey.com/dhbpapers/pslq.pdf), with improvements. PSLQ is an algorithm that can find a small but not-all-zero integer-only solution z<sub>1</sub>,z<sub>2</sub>,...,z<sub>n</sub> of the equation
