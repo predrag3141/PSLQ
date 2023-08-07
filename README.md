@@ -16,7 +16,7 @@ while updating the factors _B_, _A_ and _Q_.
 
 Here,
 - _x_ is the sequence of real numbers for which we are trying to find a relation. Consider _x_ to be a 1 x _n_ matrix of real numbers
-- _B_ and _A_ are _n_ x _n_ matrices with integer entries. They are identity matrices at initialization. After each iteration, +B+ = _A<sup>-1<sup>_.
+- _B_ and _A_ are _n_ x _n_ matrices with integer entries. They are identity matrices at initialization. After each iteration, _B_ = _A<sup>-1<sup>_.
 - _H<sub>x</sub>_ is an _n_ x _n-1_ matrix with real entries and _0s_ above the diagonal
 - _Q_ is a rotation matrix that keeps _0s_ above the diagonal of _AH<sub>x</sub>Q_
 
