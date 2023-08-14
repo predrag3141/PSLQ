@@ -8,65 +8,75 @@ import (
 	"pslq/bignumber"
 )
 
-// PerformTwoRowOp applies the row operation [[a,b],[c,d]] to the sub-matrix of
-// H consisting of rows j and j+1. The matrix [[a,b],[c,d]] must have determinant
-// 1 and it must not be the identity, or an error is returned and H remains
-// unchanged.
-func PerformTwoRowOp(h *bigmatrix.BigMatrix, j, a, b, c, d int) error {
+// PerformTwoRowOp applies the row operation with rows [subMatrix[0],subMatrix[1]] and
+// [subMatrix[2],subMatrix[3]] to the sub-matrix of H consisting of rows indices[0] and indices[1].
+// The matrix [[subMatrix[0],subMatrix[1]],[subMatrix[2],subMatrix[3]]] must have determinant
+// 1 or -1, and it must not be the identity, or an error is returned and H remains unchanged.
+func PerformTwoRowOp(h *bigmatrix.BigMatrix, indices, subMatrix []int) error {
+	numRows := h.NumRows()
+	if len(indices) != 2 {
+		return fmt.Errorf("PerformTwoRowOp: indices has length %d != 2", len(indices))
+	}
+	if indices[0] < 0 || indices[0] > numRows-2 {
+		return fmt.Errorf("PerformTwoRowOp: j == %d > %d or < 0", indices[0], numRows-2)
+	}
+	if indices[1] != indices[0]+1 {
+		return fmt.Errorf("PerformTwoRowOp: indices[1] == %d != %d + 1", indices[1], indices[0])
+	}
+	if len(subMatrix) != 4 {
+		return fmt.Errorf("PerformTwoRowOp: subMatrix has length %d != 4", len(subMatrix))
+	}
 	if h.NumRows() != h.NumCols()+1 {
 		return fmt.Errorf(
 			"PerformTwoRowOp: H is %d x %d which does not have exactly one more row than columns",
 			h.NumRows(), h.NumCols(),
 		)
 	}
-	if (j < 0) || (h.NumCols() <= j) {
-		return fmt.Errorf("PerformTwoRowOp: j = %d is not in {0,...,%d}", j, h.NumCols()-1)
-	}
-	if a == 0 && b == 1 && c == 1 && d == 0 {
+	if subMatrix[0] == 0 && subMatrix[1] == 1 && subMatrix[2] == 1 && subMatrix[3] == 0 {
 		// Optimize the most common two-row operation
-		for k := 0; k < h.NumCols() && k < (j+2); k++ {
-			Hjk, err := h.Get(j, k)
+		for k := 0; k < h.NumCols() && k <= (indices[1]); k++ {
+			Hjk, err := h.Get(indices[0], k)
 			if err != nil {
 				return fmt.Errorf(
-					"PerformTwoRowOp: could not get H[%d][%d]: %q", j, k, err.Error(),
+					"PerformTwoRowOp: could not get H[%d][%d]: %q", indices[0], k, err.Error(),
 				)
 			}
-			HjPlusOneK, err := h.Get(j+1, k)
+			HjPlusOneK, err := h.Get(indices[1], k)
 			if err != nil {
 				return fmt.Errorf(
-					"PerformTwoRowOp: could not get H[%d][%d]: %q", j+1, k, err.Error(),
+					"PerformTwoRowOp: could not get H[%d][%d]: %q", indices[1], k, err.Error(),
 				)
 			}
 			tmp := bignumber.NewFromInt64(0).Set(Hjk)
-			err = h.Set(j, k, HjPlusOneK)
+			err = h.Set(indices[0], k, HjPlusOneK)
 			if err != nil {
 				return fmt.Errorf(
-					"PerformTwoRowOp: could not set H[%d][%d]: %q", j, k, err.Error(),
+					"PerformTwoRowOp: could not set H[%d][%d]: %q", indices[0], k, err.Error(),
 				)
 			}
-			err = h.Set(j+1, k, tmp)
+			err = h.Set(indices[1], k, tmp)
 			if err != nil {
 				return fmt.Errorf(
-					"PerformTwoRowOp: could not set H[%d][%d]: %q", j+1, k, err.Error(),
+					"PerformTwoRowOp: could not set H[%d][%d]: %q", indices[1], k, err.Error(),
 				)
 			}
 		}
 		return nil
 	}
-	det := a*d - b*c
+	det := subMatrix[0]*subMatrix[3] - subMatrix[1]*subMatrix[2]
 	if det != 1 && det != -1 {
 		return fmt.Errorf(
 			"PerformTwoRowOp: a = %d, b = %d, c = %d, d = %d has non-unit determinant %d",
-			a, b, c, d, det,
+			subMatrix[0], subMatrix[1], subMatrix[2], subMatrix[3], det,
 		)
 	}
-	if a == 1 && b == 0 && c == 0 && d == 1 {
+	if subMatrix[0] == 1 && subMatrix[1] == 0 && subMatrix[2] == 0 && subMatrix[3] == 1 {
 		return fmt.Errorf(
 			"PerformTwoRowOp: row operation a = 1, b = 0, c = 0, d = 1 does nothing",
 		)
 	}
 
-	// The row operation is general (not a row swap) and has determinant 1.
+	// The row operation is general (not a row swap) and has determinant 1 or -1.
 	// The case where H is 4x3 illuminates the possible cases:
 	//  _         _   _             _     _                                _
 	// |  a b 0 0  | |  h00 0   0    |   |  (a)(h00)+(b)(h10) (b)(h11) 0    |
@@ -84,33 +94,33 @@ func PerformTwoRowOp(h *bigmatrix.BigMatrix, j, a, b, c, d int) error {
 	// |  0 0 a b  | |  h20 h21 h22  |   |  (a)(h20)+(b)(h30) (a)(h11)+(b)(h31) (a)(h22)+(b)(h32)  |
 	// |_ 0 0 c d _| |  h30 h31 h32 _|   |_ (c)(h20)+(d)(h30) (c)(h11)+(d)(h31) (c)(h22)+(d)(h32) _|
 	//
-	for k := 0; k < h.NumCols() && k <= j; k++ {
+	for k := 0; k < h.NumCols() && k <= indices[0]; k++ {
 		// For k <= j,
 		//
 		// H[j][k]   <- a H[j][k] + b H[j+1]k]
 		// H[j+1][k] <- c H[j][k] + d H[j+1]k]
-		Hjk, err := h.Get(j, k)
+		Hjk, err := h.Get(indices[0], k)
 		if err != nil {
 			return fmt.Errorf(
-				"PerformTwoRowOp: could not get H[%d][%d]: %q", j, k, err.Error(),
+				"PerformTwoRowOp: could not get H[%d][%d]: %q", indices[0], k, err.Error(),
 			)
 		}
-		HjPlusOneK, err := h.Get(j+1, k)
+		HjPlusOneK, err := h.Get(indices[1], k)
 		if err != nil {
 			return fmt.Errorf(
-				"PerformTwoRowOp: could not get H[%d][%d]: %q", j+1, k, err.Error(),
+				"PerformTwoRowOp: could not get H[%d][%d]: %q", indices[1], k, err.Error(),
 			)
 		}
-		tmp0 := bignumber.NewFromInt64(0).Int64Mul(int64(a), Hjk)
-		tmp1 := bignumber.NewFromInt64(0).Int64Mul(int64(b), HjPlusOneK)
+		tmp0 := bignumber.NewFromInt64(0).Int64Mul(int64(subMatrix[0]), Hjk)
+		tmp1 := bignumber.NewFromInt64(0).Int64Mul(int64(subMatrix[1]), HjPlusOneK)
 		newHjk := bignumber.NewFromInt64(0).Add(tmp0, tmp1)
-		tmp0.Int64Mul(int64(c), Hjk)
-		tmp1.Int64Mul(int64(d), HjPlusOneK)
+		tmp0.Int64Mul(int64(subMatrix[2]), Hjk)
+		tmp1.Int64Mul(int64(subMatrix[3]), HjPlusOneK)
 		HjPlusOneK.Add(tmp0, tmp1)
-		err = h.Set(j, k, newHjk)
+		err = h.Set(indices[0], k, newHjk)
 		if err != nil {
 			return fmt.Errorf(
-				"PerformTwoRowOp: could not set H[%d][%d]: %q", j, k, err.Error(),
+				"PerformTwoRowOp: could not set H[%d][%d]: %q", indices[0], k, err.Error(),
 			)
 		}
 	}
@@ -119,24 +129,24 @@ func PerformTwoRowOp(h *bigmatrix.BigMatrix, j, a, b, c, d int) error {
 	//
 	// H[j][j+1]   <- a H[j][j+1] + b H[j+1][j+1] = a 0 + b H[j+1][j+1] = b H[j+1][j+1]
 	// H[j+1][j+1] <- c H[j][j+1] + d H[j+1][j+1] = c 0 + d H[j+1][j+1] = d H[j+1][j+1]
-	if h.NumCols()-1 <= j {
+	if h.NumCols()-1 <= indices[0] {
 		// There is no column j+1
 		return nil
 	}
-	HjjPlusOne, err := h.Get(j, j+1)
+	HjjPlusOne, err := h.Get(indices[0], indices[1])
 	if err != nil {
 		return fmt.Errorf(
-			"PerformTwoRowOp: could not get H[%d][%d]: %q", j, j+1, err.Error(),
+			"PerformTwoRowOp: could not get H[%d][%d]: %q", indices[0], indices[1], err.Error(),
 		)
 	}
-	HjPlusOneJPlusOne, err := h.Get(j+1, j+1)
+	HjPlusOneJPlusOne, err := h.Get(indices[1], indices[1])
 	if err != nil {
 		return fmt.Errorf(
-			"PerformTwoRowOp: could not get H[%d][%d]: %q", j+1, j+1, err.Error(),
+			"PerformTwoRowOp: could not get H[%d][%d]: %q", indices[1], indices[1], err.Error(),
 		)
 	}
-	HjjPlusOne.Int64Mul(int64(b), HjPlusOneJPlusOne)
-	HjPlusOneJPlusOne.Int64Mul(int64(d), HjPlusOneJPlusOne)
+	HjjPlusOne.Int64Mul(int64(subMatrix[1]), HjPlusOneJPlusOne)
+	HjPlusOneJPlusOne.Int64Mul(int64(subMatrix[3]), HjPlusOneJPlusOne)
 	return nil
 }
 

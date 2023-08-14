@@ -221,7 +221,7 @@ func TestUpdateInt64A(t *testing.T) {
 
 			// At this point, any further setup depends on j being valid
 			if (j < 0) || (numRows-1 <= j) {
-				_, err := UpdateInt64A(aMatrix, dMatrix, numRows, j, a, b, c, d)
+				_, err := UpdateInt64A(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 				assert.Error(t, err)
 				continue
 			}
@@ -235,7 +235,7 @@ func TestUpdateInt64A(t *testing.T) {
 			assert.NoError(t, err)
 			expectedRDA, err := multiplyIntInt(expectedRD, aMatrix, numRows)
 			assert.NoError(t, err)
-			containsLargeElement, err := UpdateInt64A(aMatrix, dMatrix, numRows, j, a, b, c, d)
+			containsLargeElement, err := UpdateInt64A(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 			assert.False(t, containsLargeElement)
 			for i := 0; i < numRows; i++ {
 				for k := 0; k < numRows; k++ {
@@ -283,7 +283,7 @@ func TestUpdateBigNumberA(t *testing.T) {
 			// At this point, any further setup depends on j being valid
 			//
 			if (j < 0) || (numRows-1 <= j) {
-				err := UpdateBigNumberA(aMatrix, dMatrix, numRows, j, a, b, c, d)
+				err := UpdateBigNumberA(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 				assert.Error(t, err)
 				continue
 			}
@@ -297,7 +297,7 @@ func TestUpdateBigNumberA(t *testing.T) {
 			assert.NoError(t, err)
 			expectedRDA, err := multiplyIntInt(expectedRD, aEntries, numRows)
 			assert.NoError(t, err)
-			err = UpdateBigNumberA(aMatrix, dMatrix, numRows, j, a, b, c, d)
+			err = UpdateBigNumberA(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 			assert.NoError(t, err)
 			zero := bignumber.NewFromInt64(0)
 			for i := 0; i < numRows; i++ {
@@ -349,10 +349,10 @@ func TestUpdateInt64B(t *testing.T) {
 			}
 
 			// At this point, any further setup depends on j being valid
-			_, err := UpdateInt64B(bMatrix, eMatrix, numRows, j, a, b, c, 1000)
+			_, err := UpdateInt64B(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, 1000})
 			assert.Error(t, err) // determinant is not 1 or -1 since d == 1000
 			if (j < 0) || (numRows-1 <= j) {
-				_, err := UpdateInt64B(bMatrix, eMatrix, numRows, j, a, b, c, d)
+				_, err := UpdateInt64B(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 				assert.Error(t, err)
 				continue
 			}
@@ -366,7 +366,7 @@ func TestUpdateInt64B(t *testing.T) {
 			assert.NoError(t, err)
 			expectedBER, err := multiplyIntInt(bMatrix, expectedER, numRows)
 			assert.NoError(t, err)
-			containsLargeElement, err := UpdateInt64B(bMatrix, eMatrix, numRows, j, a, b, c, d)
+			containsLargeElement, err := UpdateInt64B(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 			assert.False(t, containsLargeElement)
 			for i := 0; i < numRows; i++ {
 				for k := 0; k < numRows; k++ {
@@ -416,7 +416,7 @@ func TestUpdateBigNumberB(t *testing.T) {
 
 			// At this point, any further setup depends on j being valid
 			if (j < 0) || (numRows-1 <= j) {
-				err := UpdateBigNumberB(bMatrix, eMatrix, numRows, j, a, b, c, d)
+				err := UpdateBigNumberB(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 				assert.Error(t, err)
 				continue
 			}
@@ -430,7 +430,7 @@ func TestUpdateBigNumberB(t *testing.T) {
 			assert.NoError(t, err)
 			expectedBER, err := multiplyIntInt(bEntries, expectedER, numRows)
 			assert.NoError(t, err)
-			err = UpdateBigNumberB(bMatrix, eMatrix, numRows, j, a, b, c, d)
+			err = UpdateBigNumberB(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
 			assert.NoError(t, err)
 			zero := bignumber.NewFromInt64(0)
 			for i := 0; i < numRows; i++ {
@@ -490,11 +490,11 @@ func TestUpdateXBigNumber_Int64(t *testing.T) {
 				// At this point, any further setup depends on j being valid
 				if (j < 0) || (numCols-1 <= j) {
 					if testNbr == int64Test {
-						err = UpdateXInt64(xMatrix, eEntries, j)
+						err = UpdateXInt64(xMatrix, eEntries, []int{j, j + 1})
 						assert.Error(t, err)
 					}
 					if testNbr == bigNumberTest {
-						err = UpdateXBigNumber(xMatrix, eBigNumberMatrix, j)
+						err = UpdateXBigNumber(xMatrix, eBigNumberMatrix, []int{j, j + 1})
 						assert.Error(t, err)
 					}
 					continue
@@ -516,11 +516,11 @@ func TestUpdateXBigNumber_Int64(t *testing.T) {
 
 				// Compute the actual updated xMatrix
 				if testNbr == int64Test {
-					err = UpdateXInt64(xMatrix, erInt64Matrix, j)
+					err = UpdateXInt64(xMatrix, erInt64Matrix, []int{j, j + 1})
 					assert.NoError(t, err)
 				}
 				if testNbr == bigNumberTest {
-					err = UpdateXBigNumber(xMatrix, erBigNumberMatrix, j)
+					err = UpdateXBigNumber(xMatrix, erBigNumberMatrix, []int{j, j + 1})
 					assert.NoError(t, err)
 				}
 

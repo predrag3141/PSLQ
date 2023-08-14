@@ -236,31 +236,38 @@ func ReduceH(h *bigmatrix.BigMatrix, dMatrix []int64) error {
 // whether a large entry -- greater than math.MaxInt32 / numRows -- was created in A
 //
 // An error in the event of discrepancies between dimensions
-func UpdateInt64A(aMatrix, dMatrix []int64, numRows, j, a, b, c, d int) (bool, error) {
+func UpdateInt64A(aMatrix, dMatrix []int64, numRows int, indices, subMatrix []int) (bool, error) {
 	hasLargeEntry := false
 	largeEntryThresh := int64(math.MaxInt32 / numRows)
 	expectedLength := numRows * numRows
 	if len(aMatrix) != expectedLength {
 		return false, fmt.Errorf("UpdateInt64A: len(aMatrix) == %d != %d = expected length",
-			len(aMatrix), expectedLength,
-		)
+			len(aMatrix), expectedLength)
 	}
 	if len(dMatrix) != expectedLength {
 		return false, fmt.Errorf("UpdateInt64A: len(dMatrix) == %d != %d = expected length",
-			len(dMatrix), expectedLength,
-		)
+			len(dMatrix), expectedLength)
 	}
-	if j < 0 || j > numRows-2 {
-		return false, fmt.Errorf("UpdateInt64A: j == %d > %d or < 0", j, numRows-2)
+	if len(indices) != 2 {
+		return false, fmt.Errorf("UpdateInt64A: indices has length %d != 2", len(indices))
+	}
+	if indices[0] < 0 || indices[0] > numRows-2 {
+		return false, fmt.Errorf("UpdateInt64A: indices[0] == %d > %d or < 0", indices[0], numRows-2)
+	}
+	if indices[1] != indices[0]+1 {
+		return false, fmt.Errorf("UpdateInt64A: indices[1] == %d != %d + 1", indices[1], indices[0])
+	}
+	if len(subMatrix) != 4 {
+		return false, fmt.Errorf("UpdateInt64A: subMatrix has length %d != 4", len(subMatrix))
 	}
 
 	// First convert dMatrix to Rj D, then left-multiply A by Rj D.
 	// Rj D is lower triangular except in rows j and j+1.
-	dToRD(dMatrix, numRows, j, a, b, c, d)
+	dToRD(dMatrix, numRows, indices, subMatrix)
 	var dotLen int // number of elements in row i of dMatrix that might not be 0
 	newA := make([]int64, numRows*numRows)
 	for i := 0; i < numRows; i++ {
-		if (i != j) && (i != j+1) {
+		if (i != indices[0]) && (i != indices[1]) {
 			// No need to calculate the last term in the dot product below, which
 			// is dMatrix[i*numRows+i] aMatrix[i*numRows+i] = aMatrix[i*numRows+i]
 			dotLen = i
@@ -303,19 +310,29 @@ func UpdateInt64A(aMatrix, dMatrix []int64, numRows, j, a, b, c, d int) (bool, e
 func UpdateBigNumberA(
 	aMatrix *bigmatrix.BigMatrix,
 	dMatrix []int64,
-	numRows, j, a, b, c, d int,
+	numRows int,
+	indices, subMatrix []int,
 ) error {
-	if j < 0 || j > numRows-2 {
-		return fmt.Errorf("UpdateBigMatrixA: j == %d > %d or < 0", j, numRows-2)
+	if len(indices) != 2 {
+		return fmt.Errorf("UpdateInt64A: indices has length %d != 2", len(indices))
+	}
+	if indices[0] < 0 || indices[0] > numRows-2 {
+		return fmt.Errorf("UpdateBigMatrixA: j == %d > %d or < 0", indices[0], numRows-2)
+	}
+	if indices[1] != indices[0]+1 {
+		return fmt.Errorf("UpdateBigMatrixA: indices[1] == %d != %d + 1", indices[1], indices[0])
+	}
+	if len(subMatrix) != 4 {
+		return fmt.Errorf("UpdateBigMatrixA: subMatrix has length %d != 4", len(subMatrix))
 	}
 
 	// First convert dMatrix to Rj D, then left-multiply A by Rj D.
 	// Rj D is lower triangular except in rows j and j+1.
-	dToRD(dMatrix, numRows, j, a, b, c, d)
+	dToRD(dMatrix, numRows, indices, subMatrix)
 	var dotLen int // number of elements in row i of dMatrix that might not be 0
 	newA := make([]*bignumber.BigNumber, numRows*numRows)
 	for i := 0; i < numRows; i++ {
-		if (i != j) && (i != j+1) {
+		if (i != indices[0]) && (i != indices[1]) {
 			// No need to calculate the last term in the dot product below, which
 			// is dMatrix[i*numRows+i] aMatrix[i*numRows+i] = aMatrix[i*numRows+i]
 			dotLen = i
@@ -380,13 +397,26 @@ func UpdateBigNumberA(
 //
 // An error in the event of discrepancies between dimensions, or if the
 // determinant of R is neither 1 nor -1.
-func UpdateInt64B(bMatrix, eMatrix []int64, numRows, j, a, b, c, d int) (bool, error) {
+func UpdateInt64B(bMatrix, eMatrix []int64, numRows int, indices, subMatrix []int) (bool, error) {
 	hasLargeEntry := false
 	largeEntryThresh := int64(math.MaxInt32 / numRows)
-	det := a*d - b*c
+	if len(indices) != 2 {
+		return false, fmt.Errorf("UpdateInt64B: indices has length %d != 2", len(indices))
+	}
+	if indices[0] < 0 || indices[0] > numRows-2 {
+		return false, fmt.Errorf("UpdateInt64B: j == %d > %d or < 0", indices[0], numRows-2)
+	}
+	if indices[1] != indices[0]+1 {
+		return false, fmt.Errorf("UpdateInt64B: indices[1] == %d != %d + 1", indices[1], indices[0])
+	}
+	if len(subMatrix) != 4 {
+		return false, fmt.Errorf("UpdateInt64B: subMatrix has length %d != 4", len(subMatrix))
+	}
+
+	det := subMatrix[0]*subMatrix[3] - subMatrix[1]*subMatrix[2]
 	if det != 1 && det != -1 {
 		return false, fmt.Errorf("UpdateInt64B: |ad-bc| = |(%d)(%d)-(%d)(%d)| = |%d| != 1",
-			a, d, b, c, det,
+			subMatrix[0], subMatrix[3], subMatrix[1], subMatrix[3], det,
 		)
 	}
 	expectedLength := numRows * numRows
@@ -400,17 +430,17 @@ func UpdateInt64B(bMatrix, eMatrix []int64, numRows, j, a, b, c, d int) (bool, e
 			len(eMatrix), expectedLength,
 		)
 	}
-	if j < 0 || j > numRows-2 {
-		return false, fmt.Errorf("UpdateInt64B: j == %d > %d or < 0", j, numRows-2)
+	if indices[0] < 0 || indices[0] > numRows-2 {
+		return false, fmt.Errorf("UpdateInt64B: j == %d > %d or < 0", indices[0], numRows-2)
 	}
 
 	// First convert eMatrix to ERj^-1, then right-multiply B by ERj^-1.
 	// ERj^-1 is lower triangular except in columns j and j+1.
-	int64EToERInverse(eMatrix, numRows, j, a, b, c, d, det)
+	int64EToERInverse(eMatrix, numRows, det, indices, subMatrix)
 	var dotStart int // first element in column i of eMatrix that might not be 0 or 1
 	newB := make([]int64, numRows*numRows)
 	for i := 0; i < numRows; i++ {
-		if (i != j) && (i != j+1) {
+		if (i != indices[0]) && (i != indices[1]) {
 			// No need to calculate the first term in the dot product below, which is
 			// bMatrix[k*numRows+i] dMatrix[i*numRows+i] = bMatrix[k*numRows+dotStart-1]
 			dotStart = i + 1
@@ -452,24 +482,33 @@ func UpdateInt64B(bMatrix, eMatrix []int64, numRows, j, a, b, c, d int) (bool, e
 // Updates to bMatrix  are done in-place. The return value is an error
 // in the event of discrepancies between dimensions, or if the determinant
 // of R is neither 1 nor -1.
-func UpdateBigNumberB(bMatrix, eMatrix *bigmatrix.BigMatrix, numRows, j, a, b, c, d int) error {
-	det := a*d - b*c
+func UpdateBigNumberB(bMatrix, eMatrix *bigmatrix.BigMatrix, numRows int, indices, subMatrix []int) error {
+	if len(indices) != 2 {
+		return fmt.Errorf("UpdateBigNumberB: indices has length %d != 2", len(indices))
+	}
+	if indices[1] != indices[0]+1 {
+		return fmt.Errorf("UpdateBigNumberB: indices[1] == %d != %d + 1", indices[1], indices[0])
+	}
+	if len(subMatrix) != 4 {
+		return fmt.Errorf("UpdateBigNumberB: subMatrix has length %d != 4", len(subMatrix))
+	}
+	det := subMatrix[0]*subMatrix[3] - subMatrix[1]*subMatrix[2]
 	if det != 1 && det != -1 {
 		return fmt.Errorf("UpdateBigNumberB: |ad-bc| = |(%d)(%d)-(%d)(%d)| = |%d| != 1",
-			a, d, b, c, det,
+			subMatrix[0], subMatrix[3], subMatrix[1], subMatrix[2], det,
 		)
 	}
-	if j < 0 || j > numRows-2 {
-		return fmt.Errorf("UpdateBigNumberB: j == %d > %d or < 0", j, numRows-2)
+	if indices[0] < 0 || indices[0] > numRows-2 {
+		return fmt.Errorf("UpdateBigNumberB: j == %d > %d or < 0", indices[0], numRows-2)
 	}
 
 	// First convert eMatrix to ERj^-1, then right-multiply B by ERj^-1.
 	// ERj^-1 is lower triangular except in columns j and j+1.
-	err := bigNumberEToERInverse(eMatrix, j, a, b, c, d, det)
+	err := bigNumberEToERInverse(eMatrix, det, indices, subMatrix)
 	if err != nil {
 		return err
 	}
-	return rightMultiplyByBigNumberER(bMatrix, eMatrix, j, "UpdateBigNumberB")
+	return rightMultiplyByBigNumberER(bMatrix, eMatrix, indices, "UpdateBigNumberB")
 }
 
 // UpdateXInt64 right-multiplies xMatrix, in-place, by erMatrix, under the
@@ -482,21 +521,21 @@ func UpdateBigNumberB(bMatrix, eMatrix *bigmatrix.BigMatrix, numRows, j, a, b, c
 // - has the same number of rows as xMatrix has columns.
 //
 // If dimensions do not match, and this is detected, an error is returned.
-func UpdateXInt64(xMatrix *bigmatrix.BigMatrix, erMatrix []int64, j int) error {
+func UpdateXInt64(xMatrix *bigmatrix.BigMatrix, erMatrix []int64, indices []int) error {
 	numCols := xMatrix.NumCols()
 	if len(erMatrix) != numCols*numCols {
 		return fmt.Errorf(
 			"UpdateXInt64: len(erMatrix) = %d != %d", len(erMatrix), numCols*numCols,
 		)
 	}
-	if (j < 0) || (numCols-1 <= j) {
-		return fmt.Errorf("UpdateXInt64: j = %d is not in {0,...,%d}", j, numCols-2)
+	if (indices[0] < 0) || (numCols <= indices[1]) {
+		return fmt.Errorf("UpdateXInt64: j = %d is not in {0,...,%d}", indices[0], numCols-2)
 	}
 	newX := make([]*bignumber.BigNumber, numCols)
 	var dotStart int
 	var err error
 	for i := 0; i < numCols; i++ {
-		if (i != j) && (i != j+1) {
+		if (i != indices[0]) && (i != indices[1]) {
 			// No need to calculate the first term in the dot product below, which is
 			// bMatrix[k*leftNumRows+i] dMatrix[i*leftNumRows+i] = bMatrix[k*leftNumRows+dotStart-1]
 			dotStart = i + 1
@@ -550,43 +589,56 @@ func UpdateXInt64(xMatrix *bigmatrix.BigMatrix, erMatrix []int64, j int) error {
 //
 // - is square
 //
-// - is lower triangular with 1s on its diagonal except in columns j and j+1
+//   - is lower triangular with 1s on its diagonal except in columns indices[0]
+//     and indices[1]
 //
 // - has the same number of rows as xMatrix has columns.
 //
 // If dimensions do not match, and this is detected, an error is returned.
-func UpdateXBigNumber(xMatrix, erMatrix *bigmatrix.BigMatrix, j int) error {
+func UpdateXBigNumber(xMatrix, erMatrix *bigmatrix.BigMatrix, indices []int) error {
+	if len(indices) != 2 {
+		return fmt.Errorf("UpdateXBigNumber: indices has length %d != 2", len(indices))
+	}
 	xNumCols := xMatrix.NumCols()
 	if erMatrix.NumCols() != xNumCols || erMatrix.NumRows() != erMatrix.NumCols() {
 		return fmt.Errorf(
-			"UpdateXInt64: xMatrix is %dx%d; erMatrix is %dx%d -- incompatible or not square",
+			"UpdateXBigNumber: xMatrix is %dx%d; erMatrix is %dx%d -- incompatible or not square",
 			xMatrix.NumRows(), xNumCols, erMatrix.NumRows(), erMatrix.NumCols(),
 		)
 	}
-	if (j < 0) || (xNumCols-1 <= j) {
-		return fmt.Errorf("UpdateXInt64: j = %d is not in {0,...,%d}", j, xMatrix.NumCols()-2)
+	if indices[0] < 0 {
+		return fmt.Errorf(
+			"UpdateXBigNumber: indices[0] = %d is not in {0,...,%d}", indices[0], xMatrix.NumCols()-2,
+		)
 	}
-	return rightMultiplyByBigNumberER(xMatrix, erMatrix, j, "UpdateXBigNumber")
+	if (indices[1] <= indices[0]) || (xNumCols <= indices[1]) {
+		return fmt.Errorf(
+			"UpdateXBigNumber: indices[0] = %d is not in {%d,...,%d}",
+			indices[0]+1, indices[1], xMatrix.NumCols()-1,
+		)
+	}
+	return rightMultiplyByBigNumberER(xMatrix, erMatrix, indices, "UpdateXBigNumber")
 }
 
 // dToRD left-multiplies D in-place by Rj. D should have been obtained by
 // GetInt64D, and is represented by the variable, dMatrix. Rj is the
 // numRows x numRows identity  matrix, except in the 2x2 sub-matrix with upper-
-// left corner at (j, j). In that sub-matrix, Rj has rows [a, b] and [c, d].
-func dToRD(dMatrix []int64, numRows, j, a, b, c, d int) {
+// left corner at (indices[0], indices[0]). In that sub-matrix, Rj has rows
+// [subMatrix[0], subMatrix[1]] and [subMatrix[2], subMatrix[3]].
+func dToRD(dMatrix []int64, numRows int, indices, subMatrix []int) {
 	// dMatrix <- Rj dMatrix. In column i,
 	//
 	// aMatrix[j][i]   <- a dMatrix[j][i] + b dMatrix[j+1][i]
 	// aMatrix[j+1][i] <- c dMatrix[j][i] + d dMatrix[j+1][i]
-	int64a := int64(a)
-	int64b := int64(b)
-	int64c := int64(c)
-	int64d := int64(d)
+	int64a := int64(subMatrix[0])
+	int64b := int64(subMatrix[1])
+	int64c := int64(subMatrix[2])
+	int64d := int64(subMatrix[3])
 	for i := 0; i < numRows; i++ {
-		newJI := int64a*dMatrix[j*numRows+i] + int64b*dMatrix[(j+1)*numRows+i]
-		newJPlus1I := int64c*dMatrix[j*numRows+i] + int64d*dMatrix[(j+1)*numRows+i]
-		dMatrix[j*numRows+i] = newJI
-		dMatrix[(j+1)*numRows+i] = newJPlus1I
+		newJI := int64a*dMatrix[indices[0]*numRows+i] + int64b*dMatrix[indices[1]*numRows+i]
+		newJPlus1I := int64c*dMatrix[indices[0]*numRows+i] + int64d*dMatrix[indices[1]*numRows+i]
+		dMatrix[indices[0]*numRows+i] = newJI
+		dMatrix[indices[1]*numRows+i] = newJPlus1I
 	}
 }
 
@@ -594,22 +646,22 @@ func dToRD(dMatrix []int64, numRows, j, a, b, c, d int) {
 // GetInt64E, and is represented by the variable, eMatrix. Rj^-1 is the numRows x numRows
 // identity matrix, except in the 2x2 sub-matrix with upper-left corner at (j, j). In
 // that sub-matrix, Rj^-1 has rows (ad-bc)[d, -b] and (ad-bc)[-c, a].
-func int64EToERInverse(eMatrix []int64, numCols, j, a, b, c, d, det int) {
+func int64EToERInverse(eMatrix []int64, numCols, det int, indices, subMatrix []int) {
 	// eMatrix <- eMatrix (Rj)^-1 . In row i, since |det| == 1,
 	//
 	// eMatrix[i][j]   <- (eMatrix[i][j] d + eMatrix[i][j+1] (-c)) / det
 	//                 = det * (eMatrix[i][j] d - eMatrix[i][j+1] c)
 	// eMatrix[i][j+1] <- (eMatrix[i][j] (-b) + eMatrix[i][j+1] a)  / det
 	//                 = det * (eMatrix[i][j+1] a - eMatrix[i][j] b)
-	aDet := int64(a * det)
-	minusBDet := int64(-b * det)
-	minusCDet := int64(-c * det)
-	dDet := int64(d * det)
+	aDet := int64(subMatrix[0] * det)
+	minusBDet := int64(-subMatrix[1] * det)
+	minusCDet := int64(-subMatrix[2] * det)
+	dDet := int64(subMatrix[3] * det)
 	for i := 0; i < numCols; i++ {
-		newEIJ := eMatrix[i*numCols+j]*dDet + eMatrix[i*numCols+j+1]*minusCDet
-		newEIJPlus1 := eMatrix[i*numCols+j+1]*aDet + eMatrix[i*numCols+j]*minusBDet
-		eMatrix[i*numCols+j] = newEIJ
-		eMatrix[i*numCols+j+1] = newEIJPlus1
+		newEIJ := eMatrix[i*numCols+indices[0]]*dDet + eMatrix[i*numCols+indices[1]]*minusCDet
+		newEIJPlus1 := eMatrix[i*numCols+indices[1]]*aDet + eMatrix[i*numCols+indices[0]]*minusBDet
+		eMatrix[i*numCols+indices[0]] = newEIJ
+		eMatrix[i*numCols+indices[1]] = newEIJPlus1
 	}
 }
 
@@ -617,44 +669,44 @@ func int64EToERInverse(eMatrix []int64, numCols, j, a, b, c, d, det int) {
 // obtained by GetBigNumberE, and is represented by the variable, eMatrix. Rj^-1 is the
 // numRows x numRows identity matrix, except in the 2x2 sub-matrix with upper-left
 // corner at (j, j). In that sub-matrix, Rj^-1 has rows (ad-bc)[d, -b] and (ad-bc)[-c, a].
-func bigNumberEToERInverse(eMatrix *bigmatrix.BigMatrix, j, a, b, c, d, det int) error {
+func bigNumberEToERInverse(eMatrix *bigmatrix.BigMatrix, det int, indices, subMatrix []int) error {
 	// eMatrix <- eMatrix (Rj)^-1 . In row i, since |det| == 1,
 	//
 	// eMatrix[i][j]   <- (eMatrix[i][j] d + eMatrix[i][j+1] (-c)) / det
 	//                 = det * (eMatrix[i][j] d - eMatrix[i][j+1] c)
 	// eMatrix[i][j+1] <- (eMatrix[i][j] (-b) + eMatrix[i][j+1] a)  / det
 	//                 = det * (eMatrix[i][j+1] a - eMatrix[i][j] b)
-	aDet := int64(a * det)
-	minusBDet := int64(-b * det)
-	minusCDet := int64(-c * det)
-	dDet := int64(d * det)
+	aDet := int64(subMatrix[0] * det)
+	minusBDet := int64(-subMatrix[1] * det)
+	minusCDet := int64(-subMatrix[2] * det)
+	dDet := int64(subMatrix[3] * det)
 	for i := 0; i < eMatrix.NumCols(); i++ {
-		oldEIJ, err := eMatrix.Get(i, j)
+		oldEIJ, err := eMatrix.Get(i, indices[0])
 		if err != nil {
 			return fmt.Errorf(
-				"UpdateBigNumberB: could not get E[%d][%d]: %q", i, j, err.Error(),
+				"UpdateBigNumberB: could not get E[%d][%d]: %q", i, indices[0], err.Error(),
 			)
 		}
-		oldEIJPlus1, err := eMatrix.Get(i, j+1)
+		oldEIJPlus1, err := eMatrix.Get(i, indices[1])
 		if err != nil {
 			return fmt.Errorf(
-				"UpdateBigNumberB: could not get E[%d][%d]: %q", i, j+1, err.Error(),
+				"UpdateBigNumberB: could not get E[%d][%d]: %q", i, indices[1], err.Error(),
 			)
 		}
 		newEIJ := bignumber.NewFromInt64(0).Int64Mul(dDet, oldEIJ)
 		newEIJ.Int64MulAdd(minusCDet, oldEIJPlus1)
 		newEIJPlus1 := bignumber.NewFromInt64(0).Int64Mul(aDet, oldEIJPlus1)
 		newEIJPlus1.Int64MulAdd(minusBDet, oldEIJ)
-		err = eMatrix.Set(i, j, newEIJ)
+		err = eMatrix.Set(i, indices[0], newEIJ)
 		if err != nil {
 			return fmt.Errorf(
-				"UpdateBigNumberB: could not set E[%d][%d]: %q", i, j, err.Error(),
+				"UpdateBigNumberB: could not set E[%d][%d]: %q", i, indices[0], err.Error(),
 			)
 		}
-		err = eMatrix.Set(i, j+1, newEIJPlus1)
+		err = eMatrix.Set(i, indices[1], newEIJPlus1)
 		if err != nil {
 			return fmt.Errorf(
-				"UpdateBigNumberB: could not set E[%d][%d]: %q", i, j+1, err.Error(),
+				"UpdateBigNumberB: could not set E[%d][%d]: %q", i, indices[1], err.Error(),
 			)
 		}
 	}
@@ -750,14 +802,14 @@ func dotProduct(x []int64, xNumCols int, y []int64, yNumCols, row, column, start
 // - has the same number of rows as erMatrix has columns.
 //
 // If dimensions do not match, and this is detected, an error is returned.
-func rightMultiplyByBigNumberER(leftMatrix, erMatrix *bigmatrix.BigMatrix, j int, caller string) error {
+func rightMultiplyByBigNumberER(leftMatrix, erMatrix *bigmatrix.BigMatrix, indices []int, caller string) error {
 	leftNumRows, leftNumCols := leftMatrix.Dimensions()
 	newLeftMatrix := make([]*bignumber.BigNumber, leftNumRows*leftNumCols)
 	var dotStart int
 	var err error
 	var newKI *bignumber.BigNumber
 	for i := 0; i < leftNumCols; i++ {
-		if (i != j) && (i != j+1) {
+		if (i != indices[0]) && (i != indices[1]) {
 			// No need to calculate the first term in the dot product below, which is
 			// bMatrix[k*leftNumRows+i] dMatrix[i*leftNumRows+i] = bMatrix[k*leftNumRows+dotStart-1]
 			dotStart = i + 1

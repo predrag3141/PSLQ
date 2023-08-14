@@ -6,6 +6,30 @@ x<sub>1</sub>z<sub>1</sub>+x<sub>2</sub>z<sub>2</sub>+...+x<sub>n</sub>z<sub>n</
 
 where the x<sub>i</sub> are real numbers.
 
+## Purpose of this Repository
+
+The purpose of this repository is to demonstrate the usefulness of PSLQ in cryptanalysis, for example against a type of cryptography based on something called LWE.
+
+### The LWE Problem
+
+"LWE" stands for [Learning with Errors](https://en.wikipedia.org/wiki/Learning_with_errors), and the "LWE problem" refers to a problem that a cryptanalyst must solve in order to break the class of crypto-systems bearing the same name.  The LWE problem can be reduced to solving _Az_ = _0_ where
+- _A_ is an _mxn_ public matrix with entries from _&#8484;<sub>q</sub>_.
+- _z_ is a short _n_-long vector with integer entries.
+
+Right-multiplying _A_ by _b<sup>^</sup>_ = [1, _b_, _b<sup>2</sup>_, ...,  _b<sup>m-1</sup>_] transforms _A_ into a _1xn_ matrix, appropriate for input to PSLQ. Solutions of _<b<sup>^</sup>A, z>_ = 0 are likely solutions of _Az_ = _0_ for sufficiently large _b_.
+
+There are lots of issues to work out, including the fact that the entries of _A_ are elements of _&#8484;<sub>q</sub>_, not _&#8484;_. There are also answers to these issues, some better than others.  For example, extending _A_ with a certain _mxm_ matrix containing _0s_ and non-zero integers of the form _b<sup>k</sup>q_, gets around the _&#8484;<sub>q</sub>_, vs. _&#8484;_ issue. Anyway, the cryptanalyst only needs to win now and then to succeed.
+
+### PSLQ as a Tool for Cryptanalysis
+
+Rather than run down all the details of the transformation of the LWE problem into a PSLQ problem, the point here is to raise the possibility that PSLQ is a powerful, if under-appreciated, tool for cryptanalysis. To be a credible tool, PSLQ should be able to solve <_x_, _z_> = 0 with the smallest possible _z_ when _x_ has hundreds of large integer entries. This repository begins to tackle this problem.
+
+Without some changes, PSLQ is not a useful tool for cryptanalysis. PSLQ is designed to handle non-integer, real input. Given integer input, PSLQ as defined in the original 1992 paper quickly finds a bad (high-norm) solution, _z_, and terminates.
+
+Read on to see how this problem can be fixed. For now, let it suffice to say that PSLQ performs iterations that involve row operations on matrices, and the original 1992 paper considers only a specific subset of row operations on adjacent rows. There are signs that not only new operations on adjacent rows fix the early termination problem, but non-adjacent rows can be operated on to make further progress.
+
+In particular, swapping non-adjacent rows appears to be the best row operation in most PSLQ iterations. If you run the tests in the `strategy` package, and see "!"s in the output, you are seeing cases where the algorithm performs an adjacent-row operation but probably should have swapped non-adjacent rows.
+
 ## How PSLQ Works
 
 The PSLQ algorithm performs iterations that maintain a matrix equation,
@@ -15,12 +39,12 @@ _xBAH<sub>x</sub>Q_ = _0_ (equation 1)
 while updating the factors _B_, _A_ and _Q_.
 
 Here,
-- _x_ is the sequence of real numbers for which we are trying to find a relation. Consider _x_ to be a 1 x _n_ matrix of real numbers
-- _B_ and _A_ are _n_ x _n_ matrices with integer entries. They are identity matrices at initialization. After each iteration, _B_ = _A<sup>-1<sup>_.
+- _x_ is the sequence of real numbers for which we are trying to find a relation. In the context of matrix equations like equation 1, consider _x_ to be a 1 x _n_ matrix of real numbers
+- _B_ and _A_ are _n_ x _n_ matrices with integer entries and determinant _1_ or _-1_. They are identity matrices at initialization. After each iteration, _B_ = _A<sup>-1<sup>_.
 - _H<sub>x</sub>_ is an _n_ x _n-1_ matrix with real entries and _0s_ above the diagonal
 - _Q_ is a rotation matrix that keeps _0s_ above the diagonal of _AH<sub>x</sub>Q_
 
-PSLQ stores _AH<sub>x</sub>Q_, which we will call _H_ (as opposed to the _H<sub>x</sub>_) in this section. In later sections, when the value of _H_ at a particular iteration _k_ matters more than it does here, the notation _H<sub>k</sub>_ will be used. Substituting _H_ for _AH<sub>x</sub>Q_ in equation 1,
+PSLQ stores _AH<sub>x</sub>Q_, which we will call _H_ (as opposed to _H<sub>x</sub>_) in this section. In later sections, when the value of _H_ at a particular iteration _k_ matters more than it does here, the notation _H<sub>k</sub>_ will be used. Substituting _H_ for _AH<sub>x</sub>Q_ in equation 1,
 
 _xBH_ = _0_ (equation 2)
 
@@ -60,7 +84,7 @@ Because the accuracy guarantees in the 1992 and 1999 PSLQ papers are not much go
 `Table 1` contains a column called `strategy`.  A "strategy" is a set of rules for choosing row operations to imrpove the diagonal of _H_. The strategies compared in `Table 1` are:
 
 - `Classic`: Swap rows to improve the diagonal of _H_ as recommended in the original PSLQ paper, until a zero-valued entry is swapped into the last diagonal element of H; terminate when that happens.
-- `IDASIF`: "Improve diagonal after solution is found". Use the `Classic` strategy until a zero is about to be swapped into the last diagonal entry of _H_. Then instead of swapping in that zero and terminating, use row operations to improve the last two columns of the table below, until there are no row operations left to perform that improve the diagonal.
+- `IDASIF`: "Improve diagonal after solution is found". Use the `Classic` strategy until a zero is about to be swapped into the last diagonal entry of _H_. Then instead of swapping in that zero and terminating, use row operations to improve the last three columns of the table below, until there are no row operations left to perform that improve the diagonal.
 
 It is understood that, just based on the description above, `IDASIF` is not a well-defined strategy. To learn the details, search `improveDiagonalWhenAboutToTerminate` in `strategy/strategy.go`.
 
@@ -71,7 +95,9 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
 `Table 1 - Test results comparing Classic and IDASIF strategies`
 <div>
 <table border="1" style="border-color: black;">
-  <tr> <td>n</td> <td>strategy</td> <td>number of iterations</td><td>|largest diagonal element / last|</td><td>| output of PSLQ |</td><td>| z<sub>0</sub> |</td></tr> 
+  <tr> <td>n</td> <td>strategy</td> <td>number of iterations</td><td>|largest diagonal element / last|</td><td>|output of PSLQ|</td><td>| z<sub>0</sub> |</td></tr>
+  <tr><td>10</td><td>Classic</td><td>82</td><td>1.000000</td><td>4.358899</td><td>4.358899</td></tr>
+  <tr><td>10</td><td>IDASIF</td><td>79</td><td>1.000000</td><td>4.358899</td><td>4.358899</td></tr>
   <tr><td>10</td><td>Classic</td><td>68</td><td>5.258257</td><td>14.491377</td><td>4.358899</td></tr>
   <tr><td>10</td><td>IDASIF</td><td>88</td><td>1.000000</td><td>4.358899</td><td>4.358899</td></tr>
   <tr><td>10</td><td>Classic</td><td>75</td><td>2.251075</td><td>4.358899</td><td>4.358899</td></tr>
@@ -90,6 +116,8 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
   <tr><td>45</td><td>IDASIF</td><td>4321</td><td>2.816535</td><td>9.273618</td><td>9.273618</td></tr>
   <tr><td>50</td><td>Classic</td><td>640</td><td>1242.966991</td><td>1242.967015</td><td>9.848858</td></tr>
   <tr><td>50</td><td>IDASIF</td><td>5432</td><td>5.197691</td><td>15.491933</td><td>9.848858</td></tr>
+  <tr><td>55</td><td>Classic</td><td>752</td><td>3962.335786</td><td>3962.347284</td><td>10.198039</td></tr>
+  <tr><td>55</td><td>IDASIF</td><td>6626</td><td>7.424804</td><td>17.916473</td><td>10.198039</td></tr>
   <tr><td>55</td><td>Classic</td><td>760</td><td>2688.422980</td><td>2688.425190</td><td>10.198039</td></tr>
   <tr><td>55</td><td>Classic</td><td>783</td><td>1051.430636</td><td>1051.434734</td><td>10.198039</td></tr>
   <tr><td>55</td><td>IDASIF</td><td>6921</td><td>6.736039</td><td>17.233688</td><td>10.198039</td></tr>
@@ -106,10 +134,16 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
   <tr><td>100</td><td>IDASIF</td><td>17841</td><td>46.556258</td><td>46.786750</td><td>13.453624</td></tr>
   <tr><td>100</td><td>Classic</td><td>1662</td><td>61586.231676</td><td>61586.231976</td><td>13.453624</td></tr>
   <tr><td>100</td><td>IDASIF</td><td>17805</td><td>37.646748</td><td>37.920970</td><td>13.453624</td></tr>
+  <tr><td>100</td><td>Classic</td><td>1735</td><td>44705.980105</td><td>44706.686144</td><td>13.453624</td></tr>
+  <tr><td>100</td><td>IDASIF</td><td>19397</td><td>35.389694</td><td>35.651087</td><td>13.453624</td></tr>
 </table>
 </div>
 
-# Contents of This Repository
+# The PSLQ Implementation in This Repository
+
+## How to Use the Library
+
+To run PSLQ using this repository as a library, you can emulate the way the tests in `pslqops/run_test.go` and `strategy/strategy_test.go` use `pslqops.OneIteration`. See below the overview of the `pslqops` and `strategy` packages, and the `bignumber` and `bigmatrix` packages they depend on.
 
 ## The bignumber Package
 
@@ -135,9 +169,9 @@ This package includes
 - `New` for constructing a `pslqops.State`, which keeps track of the matrices `x`, `B`, `A` and `H`. `New` takes an array of strings representing the input to PSLQ in decimal form.
 - `pslqops.State.OneIteration`, the top-level function that performs one iteration of PSLQ.
 
-`OneIteration` takes as an argument a function, `getR`, that examines _H_ and returns `R`, a _2_ x _2_ sub-matrix that performs a row operation on _H_. In the classic PSLQ from the original 1992 PSLQ paper, the _2_ x _2_ matrix swaps adjacent rows _j_ and _j+1_ for which a certain quantity is maximized (see `pslqops.GetRClassic` or the original 1992 PSLQ paper). Other rules for choosing `R` are implemented in the `strategy` package. One of these strategies is what `Table 1` shows results for in columns labeled `IDASIF`.
+`OneIteration` takes as an argument a function, `getR`, that examines _H_ and returns `R`, a _2_ x _2_ sub-matrix that performs a row operation on _H_. In the classic PSLQ from the original 1992 PSLQ paper, the _2_ x _2_ matrix swaps adjacent rows _j_ and _j+1_ for which a certain quantity is maximized (see `pslqops.GetRClassic` or the original 1992 PSLQ paper). Other rules for choosing `R` are implemented in the `strategy` package. One of these strategies is what `Table 1` shows results for in rows labeled `IDASIF`.
 
-A point of confusion could be that `getR` does not return anything called "R". It returns a list of integers saying what rows to operate on and what matrix to apply. That's OK, it's still an `R` matrix -- in the sense that the original 1992 PSLQ paper uses that notation -- in whatever form `OneIteration` accepts.
+A point of confusion could be that `getR` does not return anything called "R". It returns a list of integers saying what rows to operate on and what matrix to apply. That's OK, it's still an `R` matrix -- in the sense that the original 1992 PSLQ paper uses that notation -- in the form that `OneIteration` accepts.
 
 PSLQ maintains invariants like equation 2, _xBH_ = 0, which you can verify with `GetObservedRoundOffError`. Another invariant verifier is `CheckInvariants`, which verifies that _B_ = _A<sup>-1</sup>_.
 

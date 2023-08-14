@@ -70,7 +70,7 @@ func TestPerformTwoRowOp(t *testing.T) {
 
 			// Perform the actual row operation
 			actualH, err := bigmatrix.NewFromInt64Array(entries, numRows, numCols)
-			rowOpErr := PerformTwoRowOp(actualH, j, rowOp.a, rowOp.b, rowOp.c, rowOp.d)
+			rowOpErr := PerformTwoRowOp(actualH, []int{j, j + 1}, []int{rowOp.a, rowOp.b, rowOp.c, rowOp.d})
 			if rowOp.expectNoError && jIsValid {
 				assert.NoError(t, rowOpErr)
 			} else {

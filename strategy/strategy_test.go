@@ -234,38 +234,40 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 			assert.NoError(t, err)
 
 			for startingJ := -1; startingJ < endingJ; startingJ++ {
-				var actualJ, actualA, actualB, actualC, actualD int
+				var actualIndices, actualSubMatrix []int
 				if (startingJ < 0) || (endingJ <= startingJ) {
-					actualJ, actualA, actualB, actualC, actualD, err = GetFirstImprovement(
+					actualIndices, actualSubMatrix, err = GetFirstImprovement(
 						h, startingJ, 1,
 					)
 					assert.Error(t, err)
-					assert.Equal(t, endingJ, actualJ)
-					assert.Equal(t, 0, actualA)
-					assert.Equal(t, 1, actualB)
-					assert.Equal(t, 1, actualC)
-					assert.Equal(t, 0, actualD)
+					assert.Equal(t, endingJ, actualIndices[0])
+					assert.Equal(t, endingJ+1, actualIndices[1])
+					assert.Equal(t, 0, actualSubMatrix[0])
+					assert.Equal(t, 1, actualSubMatrix[1])
+					assert.Equal(t, 1, actualSubMatrix[2])
+					assert.Equal(t, 0, actualSubMatrix[3])
 					continue
 				}
 
 				for requireDiagonalSwapAsInt := 0; requireDiagonalSwapAsInt < 2; requireDiagonalSwapAsInt++ {
 					requireDiagonalSwapAsBool := []bool{false, true}[requireDiagonalSwapAsInt]
-					for maxB := -1; maxB <= maxMaxB; maxB++ {
-						if maxB < 1 {
-							actualJ, actualA, actualB, actualC, actualD, err = GetFirstImprovement(
-								h, startingJ, maxB,
+					for mb := -1; mb <= maxMaxB; mb++ {
+						if mb < 1 {
+							actualIndices, actualSubMatrix, err = GetFirstImprovement(
+								h, startingJ, mb,
 							)
 							assert.Error(t, err)
-							assert.Equal(t, endingJ, actualJ)
-							assert.Equal(t, 0, actualA)
-							assert.Equal(t, 1, actualB)
-							assert.Equal(t, 1, actualC)
-							assert.Equal(t, 0, actualD)
+							assert.Equal(t, endingJ, actualIndices[0])
+							assert.Equal(t, endingJ+1, actualIndices[1])
+							assert.Equal(t, 0, actualSubMatrix[0])
+							assert.Equal(t, 1, actualSubMatrix[1])
+							assert.Equal(t, 1, actualSubMatrix[2])
+							assert.Equal(t, 0, actualSubMatrix[3])
 							continue
 						}
 
-						expectedJ, expectedA, expectedB, expectedC, expectedD, reason := getExpectedJABCD(
-							t, hEntries, startingJ, maxB, numCols, requireDiagonalSwapAsBool,
+						expectedIndices, expectedSubMatrix, reason := getExpectedJABCD(
+							t, hEntries, startingJ, mb, numCols, requireDiagonalSwapAsBool,
 						)
 
 						// Counts of expected results need to be updated
@@ -276,7 +278,7 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 							needDiagonalSwap = 1
 						}
 						key := 1000000*hType + 100000*needDiagonalSwap + 10000*startingJ +
-							1000*expectedJ + 100*(expectedA+1) + 10*expectedB + requireDiagonalSwapAsInt
+							1000*expectedIndices[0] + 100*(expectedSubMatrix[0]+1) + 10*expectedSubMatrix[1] + requireDiagonalSwapAsInt
 						counts[key] = counts[key] + 1
 
 						// Actual results need to be calculated
@@ -284,22 +286,21 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 							// The time has come back around to supply the final parameter,
 							// requireDiagonalSwapAsBool, explicitly; or requireDiagonalSwapAsBool
 							// is not the default -- which is "true" -- so it must be supplied.
-							actualJ, actualA, actualB, actualC, actualD, err = GetFirstImprovement(
-								h, startingJ, maxB, requireDiagonalSwapAsBool,
+							actualIndices, actualSubMatrix, err = GetFirstImprovement(
+								h, startingJ, mb, requireDiagonalSwapAsBool,
 							)
 						} else {
-							actualJ, actualA, actualB, actualC, actualD, err = GetFirstImprovement(
-								h, startingJ, maxB,
-							)
+							actualIndices, actualSubMatrix, err = GetFirstImprovement(h, startingJ, mb)
 						}
 						supplyFinalParamExplicitly = !supplyFinalParamExplicitly
 						assert.NoError(t, err)
-						assert.Equalf(t, expectedJ, actualJ, reason)
-						assert.Equal(t, expectedA, actualA, reason)
-						assert.Equal(t, expectedB, actualB, reason)
-						assert.Equal(t, expectedC, actualC, reason)
-						assert.Equal(t, expectedD, actualD, reason)
-					} // Iterate over maxB
+						assert.Equalf(t, expectedIndices[0], actualIndices[0], reason)
+						assert.Equalf(t, expectedIndices[1], actualIndices[1], reason)
+						assert.Equal(t, expectedSubMatrix[0], actualSubMatrix[0], reason)
+						assert.Equal(t, expectedSubMatrix[1], actualSubMatrix[1], reason)
+						assert.Equal(t, expectedSubMatrix[2], actualSubMatrix[2], reason)
+						assert.Equal(t, expectedSubMatrix[3], actualSubMatrix[3], reason)
+					} // Iterate over mb
 				} // Iterate over whether to require a max diagonal swap to avoid returning endingJ
 			} // Iterate over startingJ
 		} // range over realistic, random and difficult h
@@ -457,8 +458,8 @@ func TestGetRImprovingDiagonal(t *testing.T) {
 		maxXAsBigInt := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(log2MaxX), nil)
 		xEntries, decimalX := getX(t, relation, maxXAsBigInt)
 
-		for whenToImproveDiagonal := range []int{
-			improveDiagonalNever, improveDiagonalWhenAboutToTerminate, improveDiagonalAlways,
+		for _, whenToImproveDiagonal := range []int{
+			improveDiagonalNever, improveDiagonalWhenAboutToTerminate, // improveDiagonalAlways,
 		} {
 			switch whenToImproveDiagonal {
 			case improveDiagonalNever:
@@ -473,17 +474,24 @@ func TestGetRImprovingDiagonal(t *testing.T) {
 			}
 			fmt.Printf("- xEntries: %v\n", xEntries)
 			fmt.Printf("- decimalX: %v\n", decimalX)
-			fmt.Printf("- relation: %v\n", relation)
+			fmt.Printf("- relation: %v with norm %f\n", relation, relationNorm)
 			fmt.Printf(
 				"- relation norm: %f, max X based on cube volume: %e max X based on sphere volume: %e\n",
 				relationNorm, maxXBasedOnCubeVolume, maxXBasedOnSphereVolume,
 			)
-			solution, dotProduct, solutionNorm, relationNorm, solutionMatches := testGetRImprovingDiagonal(
+			solution, dotProduct, solutionNorm, solutionMatches := testGetRImprovingDiagonal(
 				t, xEntries, decimalX, relation, maxExpectedFinalRatio, whenToImproveDiagonal,
 			)
-			fmt.Printf("<%v,xEntries> = %d\n", solution, dotProduct)
-			fmt.Printf("|%v| = %f\n", solution, solutionNorm)
-			fmt.Printf("|%v| = %f\n", relation, relationNorm)
+			if dotProduct == 0 {
+				fmt.Printf(
+					"solution %v with norm %f works\n", solution, solutionNorm,
+				)
+			} else {
+				fmt.Printf(
+					"solution %v with norm %f failed with dot product %d against the input\n",
+					solution, solutionNorm, dotProduct,
+				)
+			}
 			if solutionMatches {
 				fmt.Printf("match: %v == %v\n", solution, relation)
 			} else {
@@ -500,7 +508,7 @@ func testGetRImprovingDiagonal(
 	relation []int,
 	maxExpectedFinalRatio float64,
 	whenToImproveDiagonal int,
-) ([]int64, int64, float64, float64, bool) {
+) ([]int64, int64, float64, bool) {
 	// Check that the relation works
 	dotProduct := big.NewInt(0)
 	xLen := len(xEntries)
@@ -516,7 +524,7 @@ func testGetRImprovingDiagonal(
 	numIterations := 0
 	var getRFunc func(
 		h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-	) (int, int, int, int, int, error)
+	) ([]int, []int, error)
 	switch whenToImproveDiagonal {
 	case improveDiagonalNever:
 		getRFunc = ImproveDiagonalNever
@@ -541,7 +549,24 @@ func testGetRImprovingDiagonal(
 		}
 		finalDiagonal = diagonal
 
+		// Monitor statistics for the best pair of rows to swap in H
+		var hPairStatistics []pslqops.HPairStatistics
+		var bestIndex int
+		hPairStatistics, bestIndex, err = state.GetHPairStatistics()
+		assert.NoError(t, err)
+		shouldSwapNonAdjacent := false
+		if 0 <= bestIndex {
+			score := hPairStatistics[bestIndex].GetScore()
+			indices, _ := hPairStatistics[bestIndex].GetIndicesAndSubMatrix()
+			if (score < 1.0) && (indices[1]-indices[0] > 1) {
+				shouldSwapNonAdjacent = true
+			}
+		}
+
 		// Report internals for each iteration
+		if shouldSwapNonAdjacent {
+			fmt.Printf("!")
+		}
 		if aboutToTerminate {
 			if state.IsUsingBigNumber() {
 				fmt.Printf("*")
@@ -574,7 +599,7 @@ func testGetRImprovingDiagonal(
 	solution, err = state.GetColumnOfB(state.NumRows() - 1)
 	dotProduct.Set(big.NewInt(0))
 	solutionMatches := true
-	var solutionNorm, relationNorm float64
+	var solutionNorm float64
 	sgn := int64(1)
 	for i := 0; i < len(relation); i++ {
 		if (relation[i] != 0) && (int64(relation[i])+solution[i] == 0) {
@@ -590,12 +615,10 @@ func testGetRImprovingDiagonal(
 		term := big.NewInt(0).Mul(big.NewInt(solution[i]), xEntry)
 		dotProduct.Add(dotProduct, term)
 		solutionNorm += float64(solution[i] * solution[i])
-		relationNorm += float64(relation[i] * relation[i])
 	}
 	solutionNorm = math.Sqrt(solutionNorm)
-	relationNorm = math.Sqrt(relationNorm)
 	assert.True(t, dotProduct.IsInt64())
-	return solution, dotProduct.Int64(), solutionNorm, relationNorm, solutionMatches
+	return solution, dotProduct.Int64(), solutionNorm, solutionMatches
 }
 
 func printDiagonal(caption string, diagonal []*bignumber.BigNumber, ratioLargestToLast *float64) {
@@ -618,7 +641,7 @@ func printDiagonal(caption string, diagonal []*bignumber.BigNumber, ratioLargest
 func getExpectedJABCD(
 	t *testing.T, hEntries []int64, startingJ, maxB, numCols int, requireDiagonalSwap bool,
 ) (
-	int, int, int, int, int, string,
+	[]int, []int, string,
 ) {
 	var reason string
 	var h200, h201, h210, h211 float64
@@ -708,7 +731,7 @@ func getExpectedJABCD(
 						j, j, hEntries[j*numCols+j], hEntries[(j+1)*numCols+j+1], j+1, j+1,
 						a, b, j, j, h200, h211, j+1, j+1,
 					)
-					return j, a, b, c, d, fmt.Sprintf(
+					return []int{j, j + 1}, []int{a, b, c, d}, fmt.Sprintf(
 						"In expected results, a diagonal swap was found in position %d\n%s\n", j, reason,
 					)
 				}
@@ -730,18 +753,18 @@ func getExpectedJABCD(
 						j, j, j, j, score, bestScore.score,
 					)
 					bestScore.score = score
-					bestScore.j, bestScore.a, bestScore.b, bestScore.c, bestScore.d = j, a, b, c, d
+					bestScore.indices, bestScore.subMatrix = []int{j, j + 1}, []int{a, b, c, d}
 				}
 			} // Iterate over j
 		} // Iterate over b
 	} // Iterate over a
 	if (!requireDiagonalSwap) && (bestScore.score > 1.0) {
-		return bestScore.j, bestScore.a, bestScore.b, bestScore.c, bestScore.d, fmt.Sprintf(
+		return bestScore.indices, bestScore.subMatrix, fmt.Sprintf(
 			"In expected results, only a score improvement was found, in position %d\n%s\n",
-			bestScore.j, reason,
+			bestScore.indices[0], reason,
 		)
 	}
-	return numCols - 1, 0, 1, 1, 0, fmt.Sprintf(
+	return []int{numCols - 1, numCols}, []int{0, 1, 1, 0}, fmt.Sprintf(
 		"In expected results, no improvement was found\n%s\n", reason,
 	)
 }
