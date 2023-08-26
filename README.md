@@ -171,7 +171,7 @@ This package includes
 
 `OneIteration` takes as an argument a function, `getR`, that examines _H_ and returns `R`, a _2_ x _2_ sub-matrix that performs a row operation on _H_. In the classic PSLQ from the original 1992 PSLQ paper, the _2_ x _2_ matrix swaps adjacent rows _j_ and _j+1_ for which a certain quantity is maximized (see `pslqops.GetRClassic` or the original 1992 PSLQ paper). Other rules for choosing `R` are implemented in the `strategy` package. One of these strategies is what `Table 1` shows results for in rows labeled `IDASIF`.
 
-A point of confusion could be that `getR` does not return anything called "R". It returns a list of integers saying what rows to operate on and what matrix to apply. That's OK, it's still an `R` matrix -- in the sense that the original 1992 PSLQ paper uses that notation -- in the form that `OneIteration` accepts.
+A point of confusion could be that `getR` does not return anything called "R". It returns two lists of integers saying what rows to operate on and what matrix to apply. That's OK, it's still an `R` matrix -- in the sense that the original 1992 PSLQ paper uses that notation -- in the form that `OneIteration` accepts.
 
 PSLQ maintains invariants like equation 2, _xBH_ = 0, which you can verify with `GetObservedRoundOffError`. Another invariant verifier is `CheckInvariants`, which verifies that _B_ = _A<sup>-1</sup>_.
 

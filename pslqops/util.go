@@ -8,7 +8,8 @@ import (
 )
 
 // multiplyIntInt returns the matrix product, x * y, for []int64
-// x and []int64 y
+// x and []int64 y. n must equal the number of columns in x and
+// the number of rows in y.
 func multiplyIntInt(x []int64, y []int64, n int) ([]int64, error) {
 	// x is mxn, y is nxp and xy is mxp.
 	m, p, err := getDimensions(len(x), len(y), n)
@@ -53,4 +54,23 @@ func multiplyFloatInt(x []float64, y []int64, n int) ([]float64, error) {
 		}
 	}
 	return xy, nil
+}
+
+func isInversePair(x, y []int64, dim int) (bool, error) {
+	shouldBeInverse, err := multiplyIntInt(x, y, dim)
+	if err != nil {
+		return false, fmt.Errorf(
+			"could not multiply x (%d-long) by y (%d-long): %q", len(x), len(y), err.Error(),
+		)
+	}
+	for i := 0; i < dim; i++ {
+		for j := 0; j < dim; j++ {
+			if (i == j) && (shouldBeInverse[i*dim+j] != 1) {
+				return false, nil
+			} else if (i != j) && (shouldBeInverse[i*dim+j] != 0) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }

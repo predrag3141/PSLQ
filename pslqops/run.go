@@ -671,8 +671,9 @@ func (s *State) updateRoundOffError(firstIteration bool) error {
 	return nil
 }
 
-// getHPairStatistics returns an array of HPairStatistics with the necessary
-// information to evaluate swapping each pair of rows in h.
+// getHPairStatistics returns an array, hp, of HPairStatistics and the index i into
+// hp of the best-scoring element of hp. A strategy could be to swap rows hp[i].j0
+// and hp[i].j1.
 func getHPairStatistics(h *bigmatrix.BigMatrix) ([]HPairStatistics, int, error) {
 	numCols := h.NumCols()
 	numDistinctPairs := (numCols * (numCols - 1)) / 2

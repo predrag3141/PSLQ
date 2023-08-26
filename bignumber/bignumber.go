@@ -231,7 +231,7 @@ func NewFromBigNumber(input *BigNumber) *BigNumber {
 }
 
 // Sqrt sets bn to the square root of x, calculated from x.numerator padded
-// with precision-many 0s (base 2).
+// with precision-many 0s (base 2), and returns bn.
 //
 // If x < 0, an error is returned and the value of bn is unchanged.
 //
