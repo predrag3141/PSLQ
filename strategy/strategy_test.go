@@ -234,9 +234,9 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 			assert.NoError(t, err)
 
 			for startingJ := -1; startingJ < endingJ; startingJ++ {
-				var actualIndices, actualSubMatrix []int
+				var actualIndices, actualSubMatrix, actualSubMatrixInverse []int
 				if (startingJ < 0) || (endingJ <= startingJ) {
-					actualIndices, actualSubMatrix, err = GetFirstImprovement(
+					actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(
 						h, startingJ, 1,
 					)
 					assert.Error(t, err)
@@ -253,7 +253,7 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 					requireDiagonalSwapAsBool := []bool{false, true}[requireDiagonalSwapAsInt]
 					for mb := -1; mb <= maxMaxB; mb++ {
 						if mb < 1 {
-							actualIndices, actualSubMatrix, err = GetFirstImprovement(
+							actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(
 								h, startingJ, mb,
 							)
 							assert.Error(t, err)
@@ -266,7 +266,7 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 							continue
 						}
 
-						expectedIndices, expectedSubMatrix, reason := getExpectedJABCD(
+						expectedIndices, expectedSubMatrix, expectedSubMatrixInverse, reason := getExpectedJABCD(
 							t, hEntries, startingJ, mb, numCols, requireDiagonalSwapAsBool,
 						)
 
@@ -286,11 +286,11 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 							// The time has come back around to supply the final parameter,
 							// requireDiagonalSwapAsBool, explicitly; or requireDiagonalSwapAsBool
 							// is not the default -- which is "true" -- so it must be supplied.
-							actualIndices, actualSubMatrix, err = GetFirstImprovement(
+							actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(
 								h, startingJ, mb, requireDiagonalSwapAsBool,
 							)
 						} else {
-							actualIndices, actualSubMatrix, err = GetFirstImprovement(h, startingJ, mb)
+							actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(h, startingJ, mb)
 						}
 						supplyFinalParamExplicitly = !supplyFinalParamExplicitly
 						assert.NoError(t, err)
@@ -300,6 +300,10 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 						assert.Equal(t, expectedSubMatrix[1], actualSubMatrix[1], reason)
 						assert.Equal(t, expectedSubMatrix[2], actualSubMatrix[2], reason)
 						assert.Equal(t, expectedSubMatrix[3], actualSubMatrix[3], reason)
+						assert.Equal(t, expectedSubMatrixInverse[0], actualSubMatrixInverse[0], reason)
+						assert.Equal(t, expectedSubMatrixInverse[1], actualSubMatrixInverse[1], reason)
+						assert.Equal(t, expectedSubMatrixInverse[2], actualSubMatrixInverse[2], reason)
+						assert.Equal(t, expectedSubMatrixInverse[3], actualSubMatrixInverse[3], reason)
 					} // Iterate over mb
 				} // Iterate over whether to require a max diagonal swap to avoid returning endingJ
 			} // Iterate over startingJ
@@ -524,7 +528,7 @@ func testGetRImprovingDiagonal(
 	numIterations := 0
 	var getRFunc func(
 		h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-	) ([]int, []int, error)
+	) ([]int, []int, []int, error)
 	switch whenToImproveDiagonal {
 	case improveDiagonalNever:
 		getRFunc = ImproveDiagonalNever
@@ -641,7 +645,7 @@ func printDiagonal(caption string, diagonal []*bignumber.BigNumber, ratioLargest
 func getExpectedJABCD(
 	t *testing.T, hEntries []int64, startingJ, maxB, numCols int, requireDiagonalSwap bool,
 ) (
-	[]int, []int, string,
+	[]int, []int, []int, string,
 ) {
 	var reason string
 	var h200, h201, h210, h211 float64
@@ -690,7 +694,6 @@ func getExpectedJABCD(
 				//                            = (h110 h100 + h111 h101) / delta
 				// h211 = h110 g01 + h111 g11 = -h110 h101 / delta + h111 h100 / delta
 				//                            = h100 h111 / delta
-				// TODO Prove the identity h211 = h100 h111 / delta without using determinants
 				delta := math.Sqrt(h100*h100 + h101*h101)
 				g00, g01 := h100/delta, -h101/delta
 				g10, g11 := h101/delta, h100/delta
@@ -731,7 +734,8 @@ func getExpectedJABCD(
 						j, j, hEntries[j*numCols+j], hEntries[(j+1)*numCols+j+1], j+1, j+1,
 						a, b, j, j, h200, h211, j+1, j+1,
 					)
-					return []int{j, j + 1}, []int{a, b, c, d}, fmt.Sprintf(
+					det := a*d - b*c
+					return []int{j, j + 1}, []int{a, b, c, d}, []int{det * d, -det * b, -det * c, det * a}, fmt.Sprintf(
 						"In expected results, a diagonal swap was found in position %d\n%s\n", j, reason,
 					)
 				}
@@ -752,19 +756,22 @@ func getExpectedJABCD(
 						"score update: ([old h[%d][%d]^2] / [new h[%d][%d]^2]) = %f > %f = previous best\n",
 						j, j, j, j, score, bestScore.score,
 					)
+					det := a*d - b*c
 					bestScore.score = score
-					bestScore.indices, bestScore.subMatrix = []int{j, j + 1}, []int{a, b, c, d}
+					bestScore.indices = []int{j, j + 1}
+					bestScore.subMatrix = []int{a, b, c, d}
+					bestScore.subMatrixInverse = []int{det * d, -det * b, -det * c, det * a}
 				}
 			} // Iterate over j
 		} // Iterate over b
 	} // Iterate over a
 	if (!requireDiagonalSwap) && (bestScore.score > 1.0) {
-		return bestScore.indices, bestScore.subMatrix, fmt.Sprintf(
+		return bestScore.indices, bestScore.subMatrix, bestScore.subMatrixInverse, fmt.Sprintf(
 			"In expected results, only a score improvement was found, in position %d\n%s\n",
 			bestScore.indices[0], reason,
 		)
 	}
-	return []int{numCols - 1, numCols}, []int{0, 1, 1, 0}, fmt.Sprintf(
+	return []int{numCols - 1, numCols}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, fmt.Sprintf(
 		"In expected results, no improvement was found\n%s\n", reason,
 	)
 }

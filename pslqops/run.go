@@ -209,7 +209,7 @@ func New(input []string, gammaStr string) (*State, error) {
 // gamma^j |H[j][j]| is maximized. getR() should pass to maxJ the two
 // parameters, s.h and s.powersOfGamma, of getR(), described above.
 func (s *State) OneIteration(
-	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) ([]int, []int, error),
+	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) ([]int, []int, []int, error),
 ) (bool, error) {
 	// Step 1 of this PSLQ iteration
 	dMatrix, dHasLargeEntry, err := GetInt64D(s.h)
@@ -231,14 +231,14 @@ func (s *State) OneIteration(
 	}
 
 	// Step 2 of this PSLQ iteration
-	var indices, subMatrix []int
-	indices, subMatrix, err = getR(s.h, s.powersOfGamma)
+	var indices, subMatrix, subMatrixInverse []int
+	indices, subMatrix, subMatrixInverse, err = getR(s.h, s.powersOfGamma)
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not get R: %q", err.Error())
 	}
 
 	// Step 3 of this PSLQ iteration
-	err = s.step3(dMatrix, indices, subMatrix)
+	err = s.step3(dMatrix, indices, subMatrix, subMatrixInverse)
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not update matrices: %q", err.Error())
 	}
@@ -492,10 +492,10 @@ func GetMaxJ(h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber) (int,
 // indices and sub-matrix.
 func GetRClassic(
 	h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-) ([]int, []int, error) {
+) ([]int, []int, []int, error) {
 	j, err := GetMaxJ(h, powersOfGamma)
 
-	return []int{j, j + 1}, []int{0, 1, 1, 0}, err
+	return []int{j, j + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, err
 }
 
 func AboutToTerminate(h *bigmatrix.BigMatrix) (bool, error) {
@@ -508,14 +508,14 @@ func AboutToTerminate(h *bigmatrix.BigMatrix) (bool, error) {
 	return lastEntry.IsSmall(), nil
 }
 
-func (s *State) step3(dMatrix []int64, indices, subMatrix []int) error {
+func (s *State) step3(dMatrix []int64, indices, subMatrix, subMatrixInverse []int) error {
 	// Update H
-	err := PerformTwoRowOp(s.h, indices, subMatrix)
+	err := PerformRowOp(s.h, indices, subMatrix)
 	if err != nil {
 		return fmt.Errorf("OneIteration: could not left-multiply H: %q", err.Error())
 	}
-	if indices[0] < s.numCols-1 {
-		err = PerformCornering(s.h, indices[0])
+	if indices[len(indices)-1] <= s.numCols-1 {
+		err = RemoveCorner(s.h, indices)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not right-multiply H: %q", err.Error())
 		}
@@ -583,7 +583,7 @@ func (s *State) step3(dMatrix []int64, indices, subMatrix []int) error {
 
 	// Update s.bInt64Matrix or s.bBigNumberMatrix, depending on s.useBigNumber
 	if s.useBigNumber {
-		err = UpdateBigNumberB(s.bBigNumberMatrix, eBigNumberMatrix, s.numRows, indices, subMatrix)
+		err = UpdateBigNumberB(s.bBigNumberMatrix, eBigNumberMatrix, s.numRows, indices, subMatrixInverse)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update BigMatrix B: %q", err.Error())
 		}
@@ -595,7 +595,7 @@ func (s *State) step3(dMatrix []int64, indices, subMatrix []int) error {
 			return fmt.Errorf("OneIteration: could not update raw X: %q", err.Error())
 		}
 	} else {
-		hasLargeEntry, err = UpdateInt64B(s.bInt64Matrix, eInt64Matrix, s.numRows, indices, subMatrix)
+		hasLargeEntry, err = UpdateInt64B(s.bInt64Matrix, eInt64Matrix, s.numRows, indices, subMatrixInverse)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update []int64 B: %q", err.Error())
 		}

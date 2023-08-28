@@ -77,7 +77,7 @@ func TestState_OneIteration(t *testing.T) {
 		state, err := New(input, gammaStr)
 		assert.NoError(t, err)
 		var roundOffErrorAsString string
-		numIterations := 0
+		numIterations := 0 // needed outside the loop below
 		for ; numIterations < maxIterations; numIterations++ {
 			var terminated bool
 			terminated, err = state.OneIteration(GetRClassic)

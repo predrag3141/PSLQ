@@ -192,396 +192,367 @@ func TestReduceH(t *testing.T) {
 
 func TestUpdateInt64A(t *testing.T) {
 	const numRows = 7
+	const numCols = 6
 	const maxEntry = 10
 	const numSeedsPerTest = 2*numRows + 5
 	const minSeed = 41965
-	const numTests = 10
+	const numTests = 100
 	const maxSeed = minSeed + numTests*numSeedsPerTest
+	counts := make([]int, numCols+1)
 
 	for seed := minSeed; seed < maxSeed; seed += numSeedsPerTest {
-		for j := -1; j <= numRows; j++ {
-			// Set up R, D and A
-			rand.Seed(int64(seed + 2*j))
-			rMatrix := make([]int64, numRows*numRows)
-			dMatrix := make([]int64, numRows*numRows)
-			aMatrix := make([]int64, numRows*numRows)
-			a, b, c, d := createPseudoRandom2x2(t, maxEntry, int64(seed+2*j+1))
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					aMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				for k := 0; k < i; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					dMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				dMatrix[i*numRows+i] = 1
-				rMatrix[i*numRows+i] = 1
+		// Set up R, D and A
+		dMatrix := make([]int64, numRows*numRows)
+		aMatrix := make([]int64, numRows*numRows)
+		numIndices := 2 + rand.Intn(numCols-1)
+		assert.Less(t, numIndices, len(counts))
+		indices := getIndices(numIndices, numCols, true)
+		if indices[0] == numCols-1 {
+			counts[1]++
+		}
+		counts[numIndices]++
+		assert.Less(t, indices[numIndices-1], numCols+1)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				aMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-
-			// At this point, any further setup depends on j being valid
-			if (j < 0) || (numRows-1 <= j) {
-				_, err := UpdateInt64A(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-				assert.Error(t, err)
-				continue
+			for k := 0; k < i; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				dMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			rMatrix[j*numRows+j] = int64(a)
-			rMatrix[j*numRows+j+1] = int64(b)
-			rMatrix[(j+1)*numRows+j] = int64(c)
-			rMatrix[(j+1)*numRows+j+1] = int64(d)
+			dMatrix[i*numRows+i] = 1
+		}
 
-			// Compute the expected RDA and compare it to the actual updated aMatrix
-			expectedRD, err := multiplyIntInt(rMatrix, dMatrix, numRows)
+		// Compute the expected RDA and compare it to the actual updated aMatrix
+		var containsLargeElement bool
+		var expectedRD, expectedRDA []int64
+		var err error
+		subMatrix := []int{0, 1, 1, 0}
+		if indices[0] != numCols-1 {
+			// Not the swap of the last two rows
+			_, subMatrix, err = createInversePair(numIndices)
 			assert.NoError(t, err)
-			expectedRDA, err := multiplyIntInt(expectedRD, aMatrix, numRows)
-			assert.NoError(t, err)
-			containsLargeElement, err := UpdateInt64A(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-			assert.False(t, containsLargeElement)
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					assert.Equalf(t, expectedRDA[i*numRows+k], aMatrix[i*numRows+k],
-						"expectedRDA[%d][%d] = %d != %d = aMatrix[%d][%d]",
-						i, k, expectedRDA[i*numRows+k], aMatrix[i*numRows+k], i, k,
-					)
-				}
+		}
+		rMatrix := getFullInt64Matrix(indices, subMatrix, numRows)
+		expectedRD, err = multiplyIntInt(rMatrix, dMatrix, numRows)
+		assert.NoError(t, err)
+		expectedRDA, err = multiplyIntInt(expectedRD, aMatrix, numRows)
+		assert.NoError(t, err)
+		containsLargeElement, err = UpdateInt64A(aMatrix, dMatrix, numRows, indices, subMatrix)
+		assert.False(t, containsLargeElement)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				assert.Equalf(t, expectedRDA[i*numRows+k], aMatrix[i*numRows+k],
+					"expectedRDA[%d][%d] = %d != %d = aMatrix[%d][%d]",
+					i, k, expectedRDA[i*numRows+k], aMatrix[i*numRows+k], i, k,
+				)
 			}
 		}
 	}
+	printIndicesLenCounts(counts)
 }
 
 func TestUpdateBigNumberA(t *testing.T) {
 	const numRows = 7
+	const numCols = 6
 	const maxEntry = 10
 	const numSeedsPerTest = 2*numRows + 5
 	const minSeed = 41965
-	const numTests = 10
+	const numTests = 100
 	const maxSeed = minSeed + numTests*numSeedsPerTest
+	counts := make([]int, numCols+1)
 
 	for seed := minSeed; seed < maxSeed; seed += numSeedsPerTest {
-		for j := -1; j <= numRows; j++ {
-			// Set up R, D and A
-			rand.Seed(int64(seed + 2*j))
-			rMatrix := make([]int64, numRows*numRows)
-			dMatrix := make([]int64, numRows*numRows)
-			aEntries := make([]int64, numRows*numRows)
-			a, b, c, d := createPseudoRandom2x2(t, maxEntry, int64(seed+2*j+1))
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					aEntries[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				for k := 0; k < i; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					dMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				dMatrix[i*numRows+i] = 1
-				rMatrix[i*numRows+i] = 1
+		// Set up R, D and A
+		rand.Seed(int64(seed))
+		dMatrix := make([]int64, numRows*numRows)
+		aEntries := make([]int64, numRows*numRows)
+		numIndices := 2 + rand.Intn(numCols-1)
+		assert.Less(t, numIndices, len(counts))
+		indices := getIndices(numIndices, numCols, true)
+		if indices[0] == numCols-1 {
+			counts[1]++
+		}
+		counts[numIndices]++
+		assert.Less(t, indices[numIndices-1], numCols+1)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				aEntries[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			aMatrix, err := bigmatrix.NewFromInt64Array(aEntries, numRows, numRows)
-			assert.NoError(t, err)
-
-			// At this point, any further setup depends on j being valid
-			//
-			if (j < 0) || (numRows-1 <= j) {
-				err := UpdateBigNumberA(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-				assert.Error(t, err)
-				continue
+			for k := 0; k < i; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				dMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			rMatrix[j*numRows+j] = int64(a)
-			rMatrix[j*numRows+j+1] = int64(b)
-			rMatrix[(j+1)*numRows+j] = int64(c)
-			rMatrix[(j+1)*numRows+j+1] = int64(d)
+			dMatrix[i*numRows+i] = 1
+		}
+		aMatrix, err := bigmatrix.NewFromInt64Array(aEntries, numRows, numRows)
+		assert.NoError(t, err)
 
-			// Compute the expected RDA and compare it to the actual updated aMatrix
-			expectedRD, err := multiplyIntInt(rMatrix, dMatrix, numRows)
+		// Compute the expected RDA and compare it to the actual updated aMatrix
+		var expectedRD, expectedRDA []int64
+		subMatrix := []int{0, 1, 1, 0}
+		if indices[0] != numCols-1 {
+			// Not the swap of the last two rows
+			_, subMatrix, err = createInversePair(numIndices)
 			assert.NoError(t, err)
-			expectedRDA, err := multiplyIntInt(expectedRD, aEntries, numRows)
-			assert.NoError(t, err)
-			err = UpdateBigNumberA(aMatrix, dMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-			assert.NoError(t, err)
-			zero := bignumber.NewFromInt64(0)
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					expectedEntry := bignumber.NewFromInt64(expectedRDA[i*numRows+k])
-					_, expectedEntryAsStr := expectedEntry.String()
-					actualEntry, err := aMatrix.Get(i, k)
-					_, actualEntryAsStr := actualEntry.String()
-					assert.NoError(t, err)
-					equals := expectedEntry.Equals(actualEntry, zero)
-					assert.Truef(t, equals,
-						"expectedRDA[%d][%d] = %q != %q = aMatrix[%d][%d]",
-						i, k, expectedEntryAsStr, actualEntryAsStr, i, k,
-					)
-				}
+		}
+		rMatrix := getFullInt64Matrix(indices, subMatrix, numRows)
+		expectedRD, err = multiplyIntInt(rMatrix, dMatrix, numRows)
+		assert.NoError(t, err)
+		expectedRDA, err = multiplyIntInt(expectedRD, aEntries, numRows)
+		assert.NoError(t, err)
+		err = UpdateBigNumberA(aMatrix, dMatrix, numRows, indices, subMatrix)
+		assert.NoError(t, err)
+		zero := bignumber.NewFromInt64(0)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				var actualEntry *bignumber.BigNumber
+				expectedEntry := bignumber.NewFromInt64(expectedRDA[i*numRows+k])
+				_, expectedEntryAsStr := expectedEntry.String()
+				actualEntry, err = aMatrix.Get(i, k)
+				assert.NoError(t, err)
+				_, actualEntryAsStr := actualEntry.String()
+				assert.NoError(t, err)
+				equals := expectedEntry.Equals(actualEntry, zero)
+				assert.Truef(t, equals,
+					"expectedRDA[%d][%d] = %q != %q = aMatrix[%d][%d]",
+					i, k, expectedEntryAsStr, actualEntryAsStr, i, k,
+				)
 			}
 		}
 	}
+	printIndicesLenCounts(counts)
 }
 
 func TestUpdateInt64B(t *testing.T) {
 	const numRows = 7
+	const numCols = 6
 	const maxEntry = 10
 	const numSeedsPerTest = 2*numRows + 5
 	const minSeed = 24075
-	const numTests = 10
+	const numTests = 100
 	const maxSeed = minSeed + numTests*numSeedsPerTest
+	counts := make([]int, numCols+1)
 
 	for seed := minSeed; seed < maxSeed; seed += numSeedsPerTest {
-		for j := -1; j <= numRows; j++ {
-			// Set up R, D and A
-			rand.Seed(int64(seed + 2*j))
-			bMatrix := make([]int64, numRows*numRows)
-			eMatrix := make([]int64, numRows*numRows)
-			rInverseMatrix := make([]int64, numRows*numRows)
-			a, b, c, d := createPseudoRandom2x2(t, maxEntry, int64(seed+2*j+1))
-			det := int64(a*d - b*c)
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					bMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				for k := 0; k < i; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					eMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				eMatrix[i*numRows+i] = 1
-				rInverseMatrix[i*numRows+i] = 1
+		// Set up B, E and R^-1
+		bMatrix := make([]int64, numRows*numRows)
+		eMatrix := make([]int64, numRows*numRows)
+		numIndices := 2 + rand.Intn(numCols-1)
+		assert.Less(t, numIndices, len(counts))
+		indices := getIndices(numIndices, numCols, true)
+		if indices[0] == numCols-1 {
+			counts[1]++
+		}
+		counts[numIndices]++
+		assert.Less(t, indices[numIndices-1], numCols+1)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				bMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-
-			// At this point, any further setup depends on j being valid
-			_, err := UpdateInt64B(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, 1000})
-			assert.Error(t, err) // determinant is not 1 or -1 since d == 1000
-			if (j < 0) || (numRows-1 <= j) {
-				_, err := UpdateInt64B(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-				assert.Error(t, err)
-				continue
+			for k := 0; k < i; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				eMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			rInverseMatrix[j*numRows+j] = det * int64(d)
-			rInverseMatrix[j*numRows+j+1] = det * int64(-b)
-			rInverseMatrix[(j+1)*numRows+j] = det * int64(-c)
-			rInverseMatrix[(j+1)*numRows+j+1] = det * int64(a)
+			eMatrix[i*numRows+i] = 1
+		}
 
-			// Compute the expected BER and compare it to the actual updated bMatrix
-			expectedER, err := multiplyIntInt(eMatrix, rInverseMatrix, numRows)
+		// Compute the expected BER and compare it to the actual updated bMatrix
+		var containsLargeElement bool
+		var expectedER, expectedBER []int64
+		var err error
+		subMatrixInverse := []int{0, 1, 1, 0}
+		if indices[0] != numCols-1 {
+			// Not the swap of the last two rows
+			_, subMatrixInverse, err = createInversePair(numIndices)
 			assert.NoError(t, err)
-			expectedBER, err := multiplyIntInt(bMatrix, expectedER, numRows)
-			assert.NoError(t, err)
-			containsLargeElement, err := UpdateInt64B(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-			assert.False(t, containsLargeElement)
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					assert.Equalf(t, expectedBER[i*numRows+k], bMatrix[i*numRows+k],
-						"expectedBER[%d][%d] = %d != %d = bMatrix[%d][%d]",
-						i, k, expectedBER[i*numRows+k], bMatrix[i*numRows+k], i, k,
-					)
-				}
+		}
+		rInverseMatrix := getFullInt64Matrix(indices, subMatrixInverse, numRows)
+		expectedER, err = multiplyIntInt(eMatrix, rInverseMatrix, numRows)
+		assert.NoError(t, err)
+		expectedBER, err = multiplyIntInt(bMatrix, expectedER, numRows)
+		assert.NoError(t, err)
+		containsLargeElement, err = UpdateInt64B(bMatrix, eMatrix, numRows, indices, subMatrixInverse)
+		assert.False(t, containsLargeElement)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				assert.Equalf(t, expectedBER[i*numRows+k], bMatrix[i*numRows+k],
+					"expectedBER[%d][%d] = %d != %d = bMatrix[%d][%d]",
+					i, k, expectedBER[i*numRows+k], bMatrix[i*numRows+k], i, k,
+				)
 			}
 		}
 	}
+	printIndicesLenCounts(counts)
 }
 
 func TestUpdateBigNumberB(t *testing.T) {
 	const numRows = 7
+	const numCols = 6
 	const maxEntry = 10
 	const numSeedsPerTest = 2*numRows + 5
 	const minSeed = 24075
-	const numTests = 10
+	const numTests = 100
 	const maxSeed = minSeed + numTests*numSeedsPerTest
+	counts := make([]int, numCols+1)
 
 	for seed := minSeed; seed < maxSeed; seed += numSeedsPerTest {
-		for j := -1; j <= numRows; j++ {
-			// Set up R, D and A
-			rand.Seed(int64(seed + 2*j))
-			bEntries := make([]int64, numRows*numRows)
-			eEntries := make([]int64, numRows*numRows)
-			rInverseMatrix := make([]int64, numRows*numRows)
-			a, b, c, d := createPseudoRandom2x2(t, maxEntry, int64(seed+2*j+1))
-			det := int64(a*d - b*c)
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					bEntries[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				for k := 0; k < i; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					eEntries[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
-				eEntries[i*numRows+i] = 1
-				rInverseMatrix[i*numRows+i] = 1
+		// Set up B, E and R^-1
+		var eMatrix *bigmatrix.BigMatrix
+		rand.Seed(int64(seed))
+		bEntries := make([]int64, numRows*numRows)
+		eEntries := make([]int64, numRows*numRows)
+		numIndices := 2 + rand.Intn(numCols-1)
+		assert.Less(t, numIndices, len(counts))
+		indices := getIndices(numIndices, numCols, true)
+		if indices[0] == numCols-1 {
+			counts[1]++
+		}
+		counts[numIndices]++
+		assert.Less(t, indices[numIndices-1], numCols+1)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				bEntries[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			bMatrix, err := bigmatrix.NewFromInt64Array(bEntries, numRows, numRows)
-			assert.NoError(t, err)
-			eMatrix, err := bigmatrix.NewFromInt64Array(eEntries, numRows, numRows)
-			assert.NoError(t, err)
-
-			// At this point, any further setup depends on j being valid
-			if (j < 0) || (numRows-1 <= j) {
-				err := UpdateBigNumberB(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-				assert.Error(t, err)
-				continue
+			for k := 0; k < i; k++ {
+				sgn := 2*rand.Intn(2) - 1
+				eEntries[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			rInverseMatrix[j*numRows+j] = det * int64(d)
-			rInverseMatrix[j*numRows+j+1] = det * int64(-b)
-			rInverseMatrix[(j+1)*numRows+j] = det * int64(-c)
-			rInverseMatrix[(j+1)*numRows+j+1] = det * int64(a)
+			eEntries[i*numRows+i] = 1
+		}
+		bMatrix, err := bigmatrix.NewFromInt64Array(bEntries, numRows, numRows)
+		assert.NoError(t, err)
+		eMatrix, err = bigmatrix.NewFromInt64Array(eEntries, numRows, numRows)
+		assert.NoError(t, err)
 
-			// Compute the expected BER and compare it to the actual updated bMatrix
-			expectedER, err := multiplyIntInt(eEntries, rInverseMatrix, numRows)
+		// Compute the expected BER and compare it to the actual updated bMatrix
+		subMatrixInverse := []int{0, 1, 1, 0}
+		if indices[0] != numCols-1 {
+			// Not the swap of the last two rows
+			_, subMatrixInverse, err = createInversePair(numIndices)
 			assert.NoError(t, err)
-			expectedBER, err := multiplyIntInt(bEntries, expectedER, numRows)
-			assert.NoError(t, err)
-			err = UpdateBigNumberB(bMatrix, eMatrix, numRows, []int{j, j + 1}, []int{a, b, c, d})
-			assert.NoError(t, err)
-			zero := bignumber.NewFromInt64(0)
-			for i := 0; i < numRows; i++ {
-				for k := 0; k < numRows; k++ {
-					expectedEntry := bignumber.NewFromInt64(expectedBER[i*numRows+k])
-					_, expectedEntryAsStr := expectedEntry.String()
-					actualEntry, err := bMatrix.Get(i, k)
-					_, actualEntryAsStr := actualEntry.String()
-					assert.NoError(t, err)
-					equals := expectedEntry.Equals(actualEntry, zero)
-					assert.Truef(t, equals,
-						"expectedBER[%d][%d] = %q != %q = bMatrix[%d][%d]",
-						i, k, expectedEntryAsStr, actualEntryAsStr, i, k,
-					)
-				}
+		}
+		rInverseMatrix := getFullInt64Matrix(indices, subMatrixInverse, numRows)
+		expectedER, err := multiplyIntInt(eEntries, rInverseMatrix, numRows)
+		assert.NoError(t, err)
+		expectedBER, err := multiplyIntInt(bEntries, expectedER, numRows)
+		assert.NoError(t, err)
+		err = UpdateBigNumberB(bMatrix, eMatrix, numRows, indices, subMatrixInverse)
+		assert.NoError(t, err)
+		zero := bignumber.NewFromInt64(0)
+		for i := 0; i < numRows; i++ {
+			for k := 0; k < numRows; k++ {
+				expectedEntry := bignumber.NewFromInt64(expectedBER[i*numRows+k])
+				_, expectedEntryAsStr := expectedEntry.String()
+				actualEntry, err := bMatrix.Get(i, k)
+				_, actualEntryAsStr := actualEntry.String()
+				assert.NoError(t, err)
+				equals := expectedEntry.Equals(actualEntry, zero)
+				assert.Truef(t, equals,
+					"expectedBER[%d][%d] = %q != %q = bMatrix[%d][%d]",
+					i, k, expectedEntryAsStr, actualEntryAsStr, i, k,
+				)
 			}
 		}
 	}
+	printIndicesLenCounts(counts)
 }
 
 func TestUpdateXBigNumber_Int64(t *testing.T) {
-	const numCols = 7
+	const numColsInX = 7
 	const maxEntry = 10
-	const numSeedsPerTest = 2*numCols + 5
+	const numSeedsPerTest = 2*numColsInX + 5
 	const minSeed = 72540
-	const numTests = 10
+	const numTests = 100
 	const maxSeed = minSeed + numTests*numSeedsPerTest
 	const int64Test = 0
 	const bigNumberTest = 1
+	counts := make([]int, numColsInX)
 
 	for seed := minSeed; seed < maxSeed; seed += numSeedsPerTest {
-		for j := -1; j <= numCols; j++ {
-			// Set up R, D and A
-			rand.Seed(int64(seed + 2*j))
-			xEntries := make([]int64, numCols)
-			eEntries := make([]int64, numCols*numCols)
-			rInverseMatrix := make([]int64, numCols*numCols)
-			a, b, c, d := createPseudoRandom2x2(t, maxEntry, int64(seed+2*j+1))
-			det := int64(a*d - b*c)
-			for i := 0; i < numCols; i++ {
-				sgn := 2*rand.Intn(2) - 1
-				xEntries[i] = int64(sgn) * int64(rand.Intn(maxEntry))
-				eEntries[i*numCols+i] = 1
-				rInverseMatrix[i*numCols+i] = 1
-				for k := 0; k < i; k++ {
-					sgn := 2*rand.Intn(2) - 1
-					eEntries[i*numCols+k] = int64(sgn) * int64(rand.Intn(maxEntry))
-				}
+		// Set up X, B and R^-1
+		rand.Seed(int64(seed))
+		xEntries := make([]int64, numColsInX)
+		eEntries := make([]int64, numColsInX*numColsInX)
+		numIndices := 2 + rand.Intn(numColsInX-2)
+		assert.Less(t, numIndices, len(counts))
+		indices := getIndices(numIndices, numColsInX-1, true)
+		if indices[0] == numColsInX-2 {
+			counts[1]++
+		}
+		counts[numIndices]++
+		assert.Less(t, indices[numIndices-1], numColsInX)
+		for i := 0; i < numColsInX; i++ {
+			sgn := 2*rand.Intn(2) - 1
+			xEntries[i] = int64(sgn) * int64(rand.Intn(maxEntry))
+			eEntries[i*numColsInX+i] = 1
+			for k := 0; k < i; k++ {
+				sgn = 2*rand.Intn(2) - 1
+				eEntries[i*numColsInX+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			eBigNumberMatrix, err := bigmatrix.NewFromInt64Array(eEntries, numCols, numCols)
+		}
+		for testNbr := 0; testNbr < 2; testNbr++ {
+			xMatrix, err := bigmatrix.NewFromInt64Array(xEntries, 1, numColsInX)
 			assert.NoError(t, err)
-			for testNbr := 0; testNbr < 2; testNbr++ {
-				var xMatrix *bigmatrix.BigMatrix
-				xMatrix, err = bigmatrix.NewFromInt64Array(xEntries, 1, numCols)
-				assert.NoError(t, err)
 
-				// At this point, any further setup depends on j being valid
-				if (j < 0) || (numCols-1 <= j) {
-					if testNbr == int64Test {
-						err = UpdateXInt64(xMatrix, eEntries, []int{j, j + 1})
-						assert.Error(t, err)
-					}
-					if testNbr == bigNumberTest {
-						err = UpdateXBigNumber(xMatrix, eBigNumberMatrix, []int{j, j + 1})
-						assert.Error(t, err)
-					}
-					continue
-				}
-				rInverseMatrix[j*numCols+j] = det * int64(d)
-				rInverseMatrix[j*numCols+j+1] = det * int64(-b)
-				rInverseMatrix[(j+1)*numCols+j] = det * int64(-c)
-				rInverseMatrix[(j+1)*numCols+j+1] = det * int64(a)
-
-				// Compute the expected XER
-				var erInt64Matrix, expectedXER []int64
-				var erBigNumberMatrix *bigmatrix.BigMatrix
-				erInt64Matrix, err = multiplyIntInt(eEntries, rInverseMatrix, numCols)
+			// Compute the expected XER
+			var erInt64Matrix, expectedXER []int64
+			var erBigNumberMatrix *bigmatrix.BigMatrix
+			var rInverseMatrix []int64
+			subMatrixInverse := []int{0, 1, 1, 0}
+			if indices[0] != numColsInX-2 {
+				// Not the swap of the last two rows
+				_, subMatrixInverse, err = createInversePair(numIndices)
 				assert.NoError(t, err)
-				erBigNumberMatrix, err = bigmatrix.NewFromInt64Array(erInt64Matrix, numCols, numCols)
-				assert.NoError(t, err)
-				expectedXER, err = multiplyIntInt(xEntries, erInt64Matrix, numCols)
-				assert.NoError(t, err)
+			}
+			rInverseMatrix = getFullInt64Matrix(indices, subMatrixInverse, numColsInX)
+			erInt64Matrix, err = multiplyIntInt(eEntries, rInverseMatrix, numColsInX)
+			assert.NoError(t, err)
+			erBigNumberMatrix, err = bigmatrix.NewFromInt64Array(erInt64Matrix, numColsInX, numColsInX)
+			assert.NoError(t, err)
+			expectedXER, err = multiplyIntInt(xEntries, erInt64Matrix, numColsInX)
+			assert.NoError(t, err)
 
-				// Compute the actual updated xMatrix
-				if testNbr == int64Test {
-					err = UpdateXInt64(xMatrix, erInt64Matrix, []int{j, j + 1})
-					assert.NoError(t, err)
-				}
-				if testNbr == bigNumberTest {
-					err = UpdateXBigNumber(xMatrix, erBigNumberMatrix, []int{j, j + 1})
-					assert.NoError(t, err)
-				}
+			// Compute the actual updated xMatrix
+			if testNbr == int64Test {
+				err = UpdateXInt64(xMatrix, erInt64Matrix, indices)
+				assert.NoError(t, err)
+			}
+			if testNbr == bigNumberTest {
+				err = UpdateXBigNumber(xMatrix, erBigNumberMatrix, indices)
+				assert.NoError(t, err)
+			}
 
-				// Compare expected to actual
-				zero := bignumber.NewFromInt64(0)
-				for i := 0; i < numCols; i++ {
-					var actualEntry *bignumber.BigNumber
-					expectedEntry := bignumber.NewFromInt64(expectedXER[i])
-					_, expectedEntryAsStr := expectedEntry.String()
-					actualEntry, err = xMatrix.Get(0, i)
-					_, actualEntryAsStr := actualEntry.String()
-					assert.NoError(t, err)
-					equals := expectedEntry.Equals(actualEntry, zero)
-					assert.Truef(t, equals,
-						"in test %d, expectedXER[0][%d] = %q != %q = xMatrix[0][%d]",
-						testNbr, i, expectedEntryAsStr, actualEntryAsStr, i,
-					)
-				}
-			} // for testNbr in {0,1}
-		} // for each j
+			// Compare expected to actual
+			zero := bignumber.NewFromInt64(0)
+			for i := 0; i < numColsInX; i++ {
+				var actualEntry *bignumber.BigNumber
+				expectedEntry := bignumber.NewFromInt64(expectedXER[i])
+				_, expectedEntryAsStr := expectedEntry.String()
+				actualEntry, err = xMatrix.Get(0, i)
+				_, actualEntryAsStr := actualEntry.String()
+				assert.NoError(t, err)
+				equals := expectedEntry.Equals(actualEntry, zero)
+				assert.Truef(t, equals,
+					"in test %d, expectedXER[0][%d] = %q != %q = xMatrix[0][%d]",
+					testNbr, i, expectedEntryAsStr, actualEntryAsStr, i,
+				)
+			}
+		} // for testNbr in {0,1}
 	} // for each test
+	printIndicesLenCounts(counts)
 }
 
-// createPseudoRandom2x2 returns a random 2x2 matrix with determinant 1 or -1
-// and with entries bounded in absolute value by the square root of maxEntry + 3
-func createPseudoRandom2x2(t *testing.T, maxEntry int, seed int64) (int, int, int, int) {
-	rand.Seed(seed)
-	var a, b, c, d int
-	r := 3 + rand.Intn(maxEntry)
-	det := 2*rand.Intn(2) - 1 // -1 or 1
-	for i := 2; i*i <= r; i++ {
-		if r%i == 0 {
-			a = i
-			d = r / i
-		}
-		if (r-det)%i == 0 {
-			b = i
-			c = (r - det) / i
-		}
+func printIndicesLenCounts(counts []int) {
+	fmt.Printf("Last two rows were swapped %d times\n", counts[1])
+	fmt.Printf("(n, number of times numIndices was n):")
+	for n := 2; n < len(counts); n++ {
+		fmt.Printf(" (%d, %d)", n, counts[n])
 	}
-	if a == 0 || d == 0 {
-		a = 1
-		d = r
-	}
-	if b == 0 || c == 0 {
-		b = 1
-		c = r - det
-	}
-	assert.Equal(t, det, a*d-b*c)
-	return a, b, c, d
-}
+	fmt.Printf("\n")
 
-func printInt64Matrix(name string, x []int64, numRows, numCols int) {
-	blanks := "         "
-	for i := 0; i < numRows; i++ {
-		for j := 0; j < numCols; j++ {
-			fmt.Printf(" %d", x[i*numCols+j])
-		}
-		fmt.Printf("\n")
-		if i < numRows-1 {
-			fmt.Printf("%s", blanks)
-		}
-	}
 }
