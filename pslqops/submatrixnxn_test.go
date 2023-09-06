@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	bitPrecision = 50
+	bitPrecision   = 50
+	rowPermutation = "rowPermutation"
+	generalRowOp   = "generalRowOp"
 )
 
 func TestGivensRotation(t *testing.T) {
@@ -20,7 +22,7 @@ func TestGivensRotation(t *testing.T) {
 	// result of the two Givens transformations should match the equivalent result
 	// in the article (except rows there correspond to columns here).
 	//
-	// The starting matrix in the example from Wikepedia (transponsing) is
+	// The starting matrix in the example from Wikepedia (transposing) is
 	//   _         _
 	//  |  6  5  0  |
 	//  |  5  1  4  |
@@ -63,8 +65,6 @@ func TestPerformRowOp(t *testing.T) {
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 100
-	const rowSwap = "rowSwap"
-	const generalRowOp = "generalRowOp"
 	const numTests = 10
 	const minSeed = 71554
 	const seedIncrement = 1000
@@ -78,25 +78,33 @@ func TestPerformRowOp(t *testing.T) {
 				hEntries[i*numCols+j] = int64(rand.Intn(maxEntry) - (maxEntry / 2))
 			}
 		}
-		for _, rowOpType := range []string{rowSwap, generalRowOp} {
+		for _, rowOpType := range []string{rowPermutation, generalRowOp} {
 			expected := bigmatrix.NewEmpty(numRows, numCols)
-			var indices, subMatrix []int
-			var numIndices int
+			var subMatrix, subMatrixInverse []int
 			var fullMatrix *bigmatrix.BigMatrix
+			var err error
+			var rowOperation *RowOperation
+			numIndices := 2 + rand.Intn(numCols-2)
+			indices := getIndices(numIndices, numCols)
 			switch rowOpType {
-			case rowSwap:
-				numIndices = 2
-				indices = getIndices(numIndices, numCols)
-				subMatrix = []int{0, 1, 1, 0}
-				break
-			case generalRowOp:
-				numIndices = 2 + rand.Intn(numCols-2)
-				indices = getIndices(numIndices, numCols)
+			case rowPermutation:
+				perm := getPermutation(numIndices)
+				rowOperation, err = NewFromPermutation(indices, perm)
+				assert.NoError(t, err)
 				subMatrix = make([]int, numIndices*numIndices)
 				for i := 0; i < numIndices; i++ {
-					for j := 0; j < numIndices; j++ {
-						subMatrix[i*numIndices+j] = rand.Intn(maxEntry) - (maxEntry / 2)
-					}
+					subMatrix[perm[i]*numIndices+i] = 1 // left-multiplying copies row i to row perm[i]
+				}
+				break
+			case generalRowOp:
+				subMatrix, subMatrixInverse, err = createInversePair(numIndices)
+				assert.NoError(t, err)
+				rowOperation = &RowOperation{
+					Indices:        indices,
+					OperationOnH:   subMatrix,
+					OperationOnB:   subMatrixInverse,
+					PermutationOfH: [][]int{},
+					PermutationOfB: [][]int{},
 				}
 				break
 			default:
@@ -112,7 +120,7 @@ func TestPerformRowOp(t *testing.T) {
 
 			// Compare expected to actual
 			var equals bool
-			err = PerformRowOp(h, indices, subMatrix)
+			err = PerformRowOp(h, rowOperation)
 			assert.NoError(t, err)
 			equals, err = expected.Equals(h, tolerance)
 			assert.True(t, equals)
@@ -124,8 +132,6 @@ func TestRemoveCorner(t *testing.T) {
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 100
-	const rowSwap = "rowSwap"
-	const generalRowOp = "generalRowOp"
 	const numTests = 10
 	const minSeed = 12955
 	const seedIncrement = 1000
@@ -133,7 +139,7 @@ func TestRemoveCorner(t *testing.T) {
 	tolerance := bignumber.NewPowerOfTwo(-bitPrecision)
 	for testNbr := 0; testNbr < numTests; testNbr++ {
 		rand.Seed(int64(minSeed + testNbr*seedIncrement))
-		for _, rowOpType := range []string{rowSwap, generalRowOp} {
+		for _, rowOpType := range []string{rowPermutation, generalRowOp} {
 			xEntries := make([]int64, numRows)
 			for i := 0; i < numRows-1; i++ {
 				xEntries[i] = int64(rand.Intn(maxEntry) - (maxEntry / 2))
@@ -167,33 +173,52 @@ func TestRemoveCorner(t *testing.T) {
 			// For A and B with A = B^-1, xBAH should be 0
 			// The "determinant" of h should be multiplied by -1 when multiplying it by
 			// a row-swap operation, and 1 by a general row operation
-			var intA, intB, indices []int
 			var expectedDeterminant *bignumber.BigNumber
+			var rowOperation *RowOperation
+			var intA, intB []int
+			numIndices := 2 + rand.Intn(numCols-1)
+			indices := getIndices(numIndices, numCols)
 			switch rowOpType {
-			case rowSwap:
-				indices = getIndices(2, numCols)
-				intA = []int{0, 1, 1, 0}
-				intB = []int{0, 1, 1, 0}
-				expectedDeterminant = bignumber.NewFromInt64(0).Mul(
-					detH(t, h), bignumber.NewFromInt64(-1),
+			case rowPermutation:
+				intA, intB = make([]int, numIndices*numIndices), make([]int, numIndices*numIndices)
+				perm := getPermutation(numIndices)
+				rowOperation, err = NewFromPermutation(indices, perm)
+				assert.NoError(t, err)
+				for i := 0; i < numIndices; i++ {
+					intA[perm[i]*numIndices+i] = 1 // left-multiplying copies row i to row perm[i]
+					intB[i*numIndices+perm[i]] = 1 // left-multiplying copies row perm[i] to row i
+				}
+				permutationDet := 1
+				for i := 0; i < len(rowOperation.PermutationOfH); i++ {
+					if (len(rowOperation.PermutationOfH[i]) % 2) == 0 {
+						permutationDet *= -1
+					}
+				}
+				expectedDeterminant = bignumber.NewFromInt64(0).Int64Mul(
+					int64(permutationDet), detH(t, h),
 				)
 				break
 			case generalRowOp:
-				numIndices := 2 + rand.Intn(numCols-1)
-				indices = getIndices(numIndices, numCols)
 				intA, intB, err = createInversePair(numIndices)
 				assert.NoError(t, err)
-				var areInverses bool
-				int64A := copyIntToInt64(intA)
-				int64B := copyIntToInt64(intB)
-				areInverses, err = isInversePair(int64A, int64B, numIndices)
-				assert.NoError(t, err)
-				assert.True(
-					t, areInverses, "intA = %v and intB = %v should be inverses", intA, intB,
-				)
+				rowOperation = &RowOperation{
+					Indices:        indices,
+					OperationOnH:   intA,
+					OperationOnB:   intB,
+					PermutationOfH: [][]int{},
+					PermutationOfB: [][]int{},
+				}
 				expectedDeterminant = detH(t, h)
 				break
 			}
+			var areInverses bool
+			int64A := copyIntToInt64(intA)
+			int64B := copyIntToInt64(intB)
+			areInverses, err = isInversePair(int64A, int64B, numIndices)
+			assert.NoError(t, err)
+			assert.True(
+				t, areInverses, "intA = %v and intB = %v should be inverses", intA, intB,
+			)
 
 			var bigIntA, bigIntB *bigmatrix.BigMatrix
 			bigIntA, err = getFullBigNumberMatrix(indices, intA, numRows)
@@ -214,7 +239,7 @@ func TestRemoveCorner(t *testing.T) {
 
 			// Removing the corner from AH should not change the fact that xB is orthogonal to it
 			rowLengthsBefore := getRowLengths(t, ah)
-			err = RemoveCorner(ah, indices) // ah is actually AHQ now, where Q is a rotation matrix
+			err = RemoveCorner(ah, rowOperation) // ah is actually AHQ now, where Q is a rotation matrix
 			assert.NoError(t, err)
 			equals = expectedDeterminant.Equals(detH(t, ah), tolerance)
 			assert.True(t, equals)

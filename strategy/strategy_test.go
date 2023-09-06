@@ -234,18 +234,13 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 			assert.NoError(t, err)
 
 			for startingJ := -1; startingJ < endingJ; startingJ++ {
-				var actualIndices, actualSubMatrix, actualSubMatrixInverse []int
+				var actualRowOperation *pslqops.RowOperation
 				if (startingJ < 0) || (endingJ <= startingJ) {
-					actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(
+					actualRowOperation, err = GetFirstImprovement(
 						h, startingJ, 1,
 					)
 					assert.Error(t, err)
-					assert.Equal(t, endingJ, actualIndices[0])
-					assert.Equal(t, endingJ+1, actualIndices[1])
-					assert.Equal(t, 0, actualSubMatrix[0])
-					assert.Equal(t, 1, actualSubMatrix[1])
-					assert.Equal(t, 1, actualSubMatrix[2])
-					assert.Equal(t, 0, actualSubMatrix[3])
+					assert.Nil(t, actualRowOperation)
 					continue
 				}
 
@@ -253,20 +248,14 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 					requireDiagonalSwapAsBool := []bool{false, true}[requireDiagonalSwapAsInt]
 					for mb := -1; mb <= maxMaxB; mb++ {
 						if mb < 1 {
-							actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(
+							actualRowOperation, err = GetFirstImprovement(
 								h, startingJ, mb,
 							)
 							assert.Error(t, err)
-							assert.Equal(t, endingJ, actualIndices[0])
-							assert.Equal(t, endingJ+1, actualIndices[1])
-							assert.Equal(t, 0, actualSubMatrix[0])
-							assert.Equal(t, 1, actualSubMatrix[1])
-							assert.Equal(t, 1, actualSubMatrix[2])
-							assert.Equal(t, 0, actualSubMatrix[3])
 							continue
 						}
 
-						expectedIndices, expectedSubMatrix, expectedSubMatrixInverse, reason := getExpectedJABCD(
+						expectedRowOperation, reason := getExpectedJABCD(
 							t, hEntries, startingJ, mb, numCols, requireDiagonalSwapAsBool,
 						)
 
@@ -277,8 +266,18 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 						if sq1 < sq0 {
 							needDiagonalSwap = 1
 						}
+						expectedSubMatrix := make([]int, 2)
+						if expectedRowOperation.IsPermutation() {
+							// For reporting purposes, simulate what the matrix would have been
+							// if the row operation were not a permutation, namely rows [0,1] and
+							// [1,0].
+							expectedSubMatrix[0], expectedSubMatrix[1] = 0, 1
+						} else {
+							expectedSubMatrix[0], expectedSubMatrix[1] =
+								expectedRowOperation.OperationOnH[0], expectedRowOperation.OperationOnH[1]
+						}
 						key := 1000000*hType + 100000*needDiagonalSwap + 10000*startingJ +
-							1000*expectedIndices[0] + 100*(expectedSubMatrix[0]+1) + 10*expectedSubMatrix[1] + requireDiagonalSwapAsInt
+							1000*expectedRowOperation.Indices[0] + 100*(expectedSubMatrix[0]+1) + 10*expectedSubMatrix[1] + requireDiagonalSwapAsInt
 						counts[key] = counts[key] + 1
 
 						// Actual results need to be calculated
@@ -286,24 +285,20 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 							// The time has come back around to supply the final parameter,
 							// requireDiagonalSwapAsBool, explicitly; or requireDiagonalSwapAsBool
 							// is not the default -- which is "true" -- so it must be supplied.
-							actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(
+							actualRowOperation, err = GetFirstImprovement(
 								h, startingJ, mb, requireDiagonalSwapAsBool,
 							)
 						} else {
-							actualIndices, actualSubMatrix, actualSubMatrixInverse, err = GetFirstImprovement(h, startingJ, mb)
+							actualRowOperation, err = GetFirstImprovement(h, startingJ, mb)
 						}
-						supplyFinalParamExplicitly = !supplyFinalParamExplicitly
+
+						// Expected and actual need to be compared.
 						assert.NoError(t, err)
-						assert.Equalf(t, expectedIndices[0], actualIndices[0], reason)
-						assert.Equalf(t, expectedIndices[1], actualIndices[1], reason)
-						assert.Equal(t, expectedSubMatrix[0], actualSubMatrix[0], reason)
-						assert.Equal(t, expectedSubMatrix[1], actualSubMatrix[1], reason)
-						assert.Equal(t, expectedSubMatrix[2], actualSubMatrix[2], reason)
-						assert.Equal(t, expectedSubMatrix[3], actualSubMatrix[3], reason)
-						assert.Equal(t, expectedSubMatrixInverse[0], actualSubMatrixInverse[0], reason)
-						assert.Equal(t, expectedSubMatrixInverse[1], actualSubMatrixInverse[1], reason)
-						assert.Equal(t, expectedSubMatrixInverse[2], actualSubMatrixInverse[2], reason)
-						assert.Equal(t, expectedSubMatrixInverse[3], actualSubMatrixInverse[3], reason)
+						equals := expectedRowOperation.Equals(actualRowOperation)
+						assert.True(t, equals, reason)
+
+						// Loop update
+						supplyFinalParamExplicitly = !supplyFinalParamExplicitly
 					} // Iterate over mb
 				} // Iterate over whether to require a max diagonal swap to avoid returning endingJ
 			} // Iterate over startingJ
@@ -528,7 +523,7 @@ func testGetRImprovingDiagonal(
 	numIterations := 0
 	var getRFunc func(
 		h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-	) ([]int, []int, []int, error)
+	) (*pslqops.RowOperation, error)
 	switch whenToImproveDiagonal {
 	case improveDiagonalNever:
 		getRFunc = ImproveDiagonalNever
@@ -645,7 +640,7 @@ func printDiagonal(caption string, diagonal []*bignumber.BigNumber, ratioLargest
 func getExpectedJABCD(
 	t *testing.T, hEntries []int64, startingJ, maxB, numCols int, requireDiagonalSwap bool,
 ) (
-	[]int, []int, []int, string,
+	*pslqops.RowOperation, string,
 ) {
 	var reason string
 	var h200, h201, h210, h211 float64
@@ -734,10 +729,20 @@ func getExpectedJABCD(
 						j, j, hEntries[j*numCols+j], hEntries[(j+1)*numCols+j+1], j+1, j+1,
 						a, b, j, j, h200, h211, j+1, j+1,
 					)
+					if a == 0 {
+						// A row operation that is a permutation is expected
+						rowOperation, err := pslqops.NewFromPermutation([]int{j, j + 1}, []int{1, 0})
+						assert.NoError(t, err)
+						return rowOperation, fmt.Sprintf(
+							"In expected results, a diagonal swap was found in position %d\n%s\n", j, reason,
+						)
+					}
 					det := a*d - b*c
-					return []int{j, j + 1}, []int{a, b, c, d}, []int{det * d, -det * b, -det * c, det * a}, fmt.Sprintf(
-						"In expected results, a diagonal swap was found in position %d\n%s\n", j, reason,
-					)
+					return pslqops.NewFromSubMatrices(
+							[]int{j, j + 1}, []int{a, b, c, d}, []int{det * d, -det * b, -det * c, det * a},
+						), fmt.Sprintf(
+							"In expected results, a diagonal swap was found in position %d\n%s\n", j, reason,
+						)
 				}
 				if absH000 <= absH011 {
 					reason += fmt.Sprintf(
@@ -756,22 +761,40 @@ func getExpectedJABCD(
 						"score update: ([old h[%d][%d]^2] / [new h[%d][%d]^2]) = %f > %f = previous best\n",
 						j, j, j, j, score, bestScore.score,
 					)
-					det := a*d - b*c
 					bestScore.score = score
 					bestScore.indices = []int{j, j + 1}
-					bestScore.subMatrix = []int{a, b, c, d}
-					bestScore.subMatrixInverse = []int{det * d, -det * b, -det * c, det * a}
+					if a == 0 {
+						bestScore.subMatrix = []int{}
+						bestScore.subMatrixInverse = []int{}
+						bestScore.permutation = []int{1, 0}
+					} else {
+						det := a*d - b*c
+						bestScore.subMatrix = []int{a, b, c, d}
+						bestScore.subMatrixInverse = []int{det * d, -det * b, -det * c, det * a}
+						bestScore.permutation = []int{}
+					}
 				}
 			} // Iterate over j
 		} // Iterate over b
 	} // Iterate over a
 	if (!requireDiagonalSwap) && (bestScore.score > 1.0) {
-		return bestScore.indices, bestScore.subMatrix, bestScore.subMatrixInverse, fmt.Sprintf(
+		reason = fmt.Sprintf(
 			"In expected results, only a score improvement was found, in position %d\n%s\n",
 			bestScore.indices[0], reason,
 		)
+		if len(bestScore.permutation) != 0 {
+			rowOperation, err := pslqops.NewFromPermutation(bestScore.indices, bestScore.permutation)
+			assert.NoError(t, err)
+			return rowOperation, reason
+		}
+		rowOperation := pslqops.NewFromSubMatrices(
+			bestScore.indices, bestScore.subMatrix, bestScore.subMatrixInverse,
+		)
+		return rowOperation, reason
 	}
-	return []int{numCols - 1, numCols}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, fmt.Sprintf(
+	rowOperation, err := pslqops.NewFromPermutation([]int{numCols - 1, numCols}, []int{1, 0})
+	assert.NoError(t, err)
+	return rowOperation, fmt.Sprintf(
 		"In expected results, no improvement was found\n%s\n", reason,
 	)
 }

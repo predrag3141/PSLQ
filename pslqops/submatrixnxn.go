@@ -94,64 +94,23 @@ func GivensRotation(h *bigmatrix.BigMatrix, j0, j1 int) error {
 	return nil
 }
 
-func PerformRowOp(h *bigmatrix.BigMatrix, indices, subMatrix []int) error {
-	numRows, numCols := h.Dimensions()
-	if numRows != numCols+1 {
-		return fmt.Errorf(
-			"PerformRowOp: H is %d x %d which does not have exactly one more row than columns",
-			h.NumRows(), h.NumCols(),
-		)
-	}
-	numIndices := len(indices)
-	err := checkIndices(numRows, numCols, len(subMatrix), indices, "PerformRowOp")
-	if err != nil {
-		return err
-	}
-	if (numIndices == 2) && (subMatrix[0] == 0) && (subMatrix[1] == 1) && (subMatrix[2] == 1) && (subMatrix[3] == 0) {
-		// This is a row swap, the most common row operation. Optimize for that here.
-		// Assume that H is 0 to the right of h[indices[j]][indices[1]] for j = 0, 1;
-		// so swapping ends at column indices[1].
-		for k := 0; k < numCols && k <= (indices[1]); k++ {
-			var h0k *bignumber.BigNumber
-			h0k, err = h.Get(indices[0], k)
-			if err != nil {
-				return fmt.Errorf(
-					"PerformRowOp: could not get H[%d][%d]: %q", indices[0], k, err.Error(),
-				)
-			}
-			var h1k *bignumber.BigNumber
-			h1k, err = h.Get(indices[1], k)
-			if err != nil {
-				return fmt.Errorf(
-					"PerformRowOp: could not get H[%d][%d]: %q", indices[1], k, err.Error(),
-				)
-			}
-			tmp := bignumber.NewFromInt64(0).Set(h0k)
-			err = h.Set(indices[0], k, h1k)
-			if err != nil {
-				return fmt.Errorf(
-					"PerformRowOp: could not set H[%d][%d]: %q", indices[0], k, err.Error(),
-				)
-			}
-			err = h.Set(indices[1], k, tmp)
-			if err != nil {
-				return fmt.Errorf(
-					"PerformRowOp: could not set H[%d][%d]: %q", indices[1], k, err.Error(),
-				)
-			}
-		}
-		return nil
+func PerformRowOp(h *bigmatrix.BigMatrix, ro *RowOperation) error {
+	if len(ro.PermutationOfH) != 0 {
+		return h.PermuteRows(ro.PermutationOfH)
 	}
 
-	// The row operation is general (not a swap of two rows).
-	// Int64DotProduct will be usable once subMatrix is expanded to numRows columns
-	// and converted to int64 in int64SubMatrix. Each column of int64SubMatrix equals
-	// either the 0 vector, or a column of subMatrix, depending on whether indices
-	// contains that column's number.
+	// The row operation is general (not a permutation of rows).
+	//
+	// Int64DotProduct will have its operands once rowOperation.OperationOnA is expanded to
+	// numRows columns and converted to int64 in int64SubMatrix. Each column of int64SubMatrix
+	// equals either the 0 vector, or a column of rowOperation.OperationOnA, depending on whether
+	// indices contains that column's number.
+	numIndices := len(ro.Indices)
+	numRows, numCols := h.Dimensions()
 	int64SubMatrix := make([]int64, numIndices*numRows)
 	for i := 0; i < numIndices; i++ {
 		for j := 0; j < numIndices; j++ {
-			int64SubMatrix[i*numRows+indices[j]] = int64(subMatrix[i*numIndices+j])
+			int64SubMatrix[i*numRows+ro.Indices[j]] = int64(ro.OperationOnH[i*numIndices+j])
 		}
 	}
 
@@ -160,12 +119,14 @@ func PerformRowOp(h *bigmatrix.BigMatrix, indices, subMatrix []int) error {
 	cursor := 0
 	for i := 0; i < numIndices; i++ {
 		for j := 0; j < numCols; j++ {
+			var err error
 			newSubMatrixOfH[cursor], err = bigmatrix.Int64DotProduct(
 				int64SubMatrix, numRows, h, i, j, j, numRows, false,
 			)
 			if err != nil {
 				return fmt.Errorf(
-					"PerformRowOp: could not compute H[%d][%d]: %q", indices[i], j, err.Error(),
+					"PerformRowOp: could not compute H[%d][%d]: %q",
+					ro.Indices[i], j, err.Error(),
 				)
 			}
 			cursor++
@@ -176,10 +137,11 @@ func PerformRowOp(h *bigmatrix.BigMatrix, indices, subMatrix []int) error {
 	cursor = 0
 	for i := 0; i < numIndices; i++ {
 		for j := 0; j < numCols; j++ {
-			err = h.Set(indices[i], j, newSubMatrixOfH[cursor])
+			err := h.Set(ro.Indices[i], j, newSubMatrixOfH[cursor])
 			if err != nil {
 				return fmt.Errorf(
-					"PerformRowOp: could not set H[%d][%d]: %q", indices[i], j, err.Error(),
+					"PerformRowOp: could not set H[%d][%d]: %q",
+					ro.Indices[i], j, err.Error(),
 				)
 			}
 			cursor++
@@ -188,14 +150,14 @@ func PerformRowOp(h *bigmatrix.BigMatrix, indices, subMatrix []int) error {
 	return nil
 }
 
-func RemoveCorner(h *bigmatrix.BigMatrix, indices []int) error {
+func RemoveCorner(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 	numRows, numCols := h.Dimensions()
-	err := checkIndices(numRows, numCols, len(indices)*len(indices), indices, "RemoveCorner")
+	err := ro.ValidateIndices(numRows, numCols, "RemoveCorner")
 	if err != nil {
 		return err
 	}
-	j0 := indices[0]
-	j1 := indices[len(indices)-1]
+	j0 := ro.Indices[0]
+	j1 := ro.Indices[len(ro.Indices)-1]
 	for i := j0; i <= j1; i++ {
 		for j := j1; j > i; j-- {
 			var hij *bignumber.BigNumber
@@ -214,49 +176,6 @@ func RemoveCorner(h *bigmatrix.BigMatrix, indices []int) error {
 				)
 			}
 		}
-	}
-	return nil
-}
-
-func checkIndices(numRows, numCols, subMatrixLen int, indices []int, caller string) error {
-	numIndices := len(indices)
-	if subMatrixLen != numIndices*numIndices {
-		return fmt.Errorf(
-			"%s: mismatched lengths %d of indices and %d of subMatrix",
-			caller, numIndices, subMatrixLen,
-		)
-	}
-	if numIndices < 2 {
-		return fmt.Errorf(
-			"%s: length of indices must be at least 2 but is %d", caller, numIndices,
-		)
-	}
-	if indices[0] < 0 {
-		return fmt.Errorf("%s: indices[0] = %d is negative", caller, indices[0])
-	}
-	for i := 1; i < numIndices; i++ {
-		if indices[i] <= indices[i-1] {
-			return fmt.Errorf("%s: indices %v is not stricty increasing", caller, indices)
-		}
-	}
-	if numRows <= indices[numIndices-1] {
-		// No index can be numRows or more, but since indices is an increasing array, the
-		// only index to check is the last one (and it failed)
-		return fmt.Errorf(
-			"%s: numRows = %d <= %d = indices[%d]",
-			caller, numRows, indices[numIndices-1], numIndices-1,
-		)
-	}
-	if (numCols == indices[numIndices-1]) && (indices[0] != numCols-1) {
-		// It is OK if the last index is numCols, a.k.a. numRows-1, but only when
-		// swapping the last two rows. But swapping the last two rows would have
-		// required indices[0] == numCols - 1. No check that numIndices == 2 was
-		// needed, since the elements of indices are strictly increasing; which
-		// means that ensuring that indices[0] == numCols - 1 also ensures that
-		// numIndices == 2.
-		return fmt.Errorf(
-			"%s: %d <= %d = indices[%d]", caller, numCols, indices[numIndices-1], numIndices-1,
-		)
 	}
 	return nil
 }

@@ -225,21 +225,27 @@ func TestUpdateInt64A(t *testing.T) {
 		}
 
 		// Compute the expected RDA and compare it to the actual updated aMatrix
+		// TODO update this to test non-swap permutations
 		var containsLargeElement bool
-		var expectedRD, expectedRDA []int64
-		var err error
-		subMatrix := []int{0, 1, 1, 0}
-		if indices[0] != numCols-1 {
-			// Not the swap of the last two rows
-			_, subMatrix, err = createInversePair(numIndices)
+		var rMatrix, expectedRDA []int64
+		var rowOperation *RowOperation
+		if indices[0] == numCols-1 {
+			var err error
+			rowOperation, err = NewFromPermutation(indices, []int{1, 0})
 			assert.NoError(t, err)
+			rMatrix = getFullInt64Matrix(indices, []int{0, 1, 1, 0}, numRows)
+		} else {
+			// Not the swap of the last two rows
+			subMatrix, subMatrixInverse, err := createInversePair(numIndices)
+			assert.NoError(t, err)
+			rowOperation = NewFromSubMatrices(indices, subMatrix, subMatrixInverse)
+			rMatrix = getFullInt64Matrix(indices, subMatrix, numRows)
 		}
-		rMatrix := getFullInt64Matrix(indices, subMatrix, numRows)
-		expectedRD, err = multiplyIntInt(rMatrix, dMatrix, numRows)
+		expectedRD, err := multiplyIntInt(rMatrix, dMatrix, numRows)
 		assert.NoError(t, err)
 		expectedRDA, err = multiplyIntInt(expectedRD, aMatrix, numRows)
 		assert.NoError(t, err)
-		containsLargeElement, err = UpdateInt64A(aMatrix, dMatrix, numRows, indices, subMatrix)
+		containsLargeElement, err = UpdateInt64A(aMatrix, dMatrix, numRows, rowOperation)
 		assert.False(t, containsLargeElement)
 		for i := 0; i < numRows; i++ {
 			for k := 0; k < numRows; k++ {
@@ -291,19 +297,27 @@ func TestUpdateBigNumberA(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Compute the expected RDA and compare it to the actual updated aMatrix
-		var expectedRD, expectedRDA []int64
-		subMatrix := []int{0, 1, 1, 0}
-		if indices[0] != numCols-1 {
-			// Not the swap of the last two rows
-			_, subMatrix, err = createInversePair(numIndices)
+		// TODO update this to test non-swap permutations
+		var rMatrix, expectedRD, expectedRDA []int64
+		var rowOperation *RowOperation
+		if indices[0] == numCols-1 {
+			// Swap of the last two rows
+			rowOperation, err = NewFromPermutation(indices, []int{1, 0})
 			assert.NoError(t, err)
+			rMatrix = getFullInt64Matrix(indices, []int{0, 1, 1, 0}, numRows)
+		} else {
+			// Not the swap of the last two rows
+			var subMatrix, subMatrixInverse []int
+			subMatrix, subMatrixInverse, err = createInversePair(numIndices)
+			assert.NoError(t, err)
+			rowOperation = NewFromSubMatrices(indices, subMatrix, subMatrixInverse)
+			rMatrix = getFullInt64Matrix(indices, subMatrix, numRows)
 		}
-		rMatrix := getFullInt64Matrix(indices, subMatrix, numRows)
 		expectedRD, err = multiplyIntInt(rMatrix, dMatrix, numRows)
 		assert.NoError(t, err)
 		expectedRDA, err = multiplyIntInt(expectedRD, aEntries, numRows)
 		assert.NoError(t, err)
-		err = UpdateBigNumberA(aMatrix, dMatrix, numRows, indices, subMatrix)
+		err = UpdateBigNumberA(aMatrix, dMatrix, numRows, rowOperation)
 		assert.NoError(t, err)
 		zero := bignumber.NewFromInt64(0)
 		for i := 0; i < numRows; i++ {
@@ -361,21 +375,29 @@ func TestUpdateInt64B(t *testing.T) {
 		}
 
 		// Compute the expected BER and compare it to the actual updated bMatrix
+		// TODO update this to test non-swap permutations
 		var containsLargeElement bool
-		var expectedER, expectedBER []int64
+		var rInverseMatrix, expectedER, expectedBER []int64
 		var err error
-		subMatrixInverse := []int{0, 1, 1, 0}
-		if indices[0] != numCols-1 {
-			// Not the swap of the last two rows
-			_, subMatrixInverse, err = createInversePair(numIndices)
+		var rowOperation *RowOperation
+		if indices[0] == numCols-1 {
+			// Swap of the last two rows
+			rowOperation, err = NewFromPermutation(indices, []int{1, 0})
 			assert.NoError(t, err)
+			rInverseMatrix = getFullInt64Matrix(indices, []int{0, 1, 1, 0}, numRows)
+		} else {
+			// Not the swap of the last two rows
+			var subMatrix, subMatrixInverse []int
+			subMatrix, subMatrixInverse, err = createInversePair(numIndices)
+			assert.NoError(t, err)
+			rowOperation = NewFromSubMatrices(indices, subMatrix, subMatrixInverse)
+			rInverseMatrix = getFullInt64Matrix(indices, subMatrixInverse, numRows)
 		}
-		rInverseMatrix := getFullInt64Matrix(indices, subMatrixInverse, numRows)
 		expectedER, err = multiplyIntInt(eMatrix, rInverseMatrix, numRows)
 		assert.NoError(t, err)
 		expectedBER, err = multiplyIntInt(bMatrix, expectedER, numRows)
 		assert.NoError(t, err)
-		containsLargeElement, err = UpdateInt64B(bMatrix, eMatrix, numRows, indices, subMatrixInverse)
+		containsLargeElement, err = UpdateInt64B(bMatrix, eMatrix, numRows, rowOperation)
 		assert.False(t, containsLargeElement)
 		for i := 0; i < numRows; i++ {
 			for k := 0; k < numRows; k++ {
@@ -430,18 +452,27 @@ func TestUpdateBigNumberB(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Compute the expected BER and compare it to the actual updated bMatrix
-		subMatrixInverse := []int{0, 1, 1, 0}
-		if indices[0] != numCols-1 {
-			// Not the swap of the last two rows
-			_, subMatrixInverse, err = createInversePair(numIndices)
+		// TODO update this to test non-swap permutations
+		var rowOperation *RowOperation
+		var rInverseMatrix []int64
+		if indices[0] == numCols-1 {
+			// Swap of the last two rows
+			rowOperation, err = NewFromPermutation(indices, []int{1, 0})
 			assert.NoError(t, err)
+			rInverseMatrix = getFullInt64Matrix(indices, []int{0, 1, 1, 0}, numRows)
+		} else {
+			// Not the swap of the last two rows
+			var subMatrix, subMatrixInverse []int
+			subMatrix, subMatrixInverse, err = createInversePair(numIndices)
+			assert.NoError(t, err)
+			rowOperation = NewFromSubMatrices(indices, subMatrix, subMatrixInverse)
+			rInverseMatrix = getFullInt64Matrix(indices, subMatrixInverse, numRows)
 		}
-		rInverseMatrix := getFullInt64Matrix(indices, subMatrixInverse, numRows)
 		expectedER, err := multiplyIntInt(eEntries, rInverseMatrix, numRows)
 		assert.NoError(t, err)
 		expectedBER, err := multiplyIntInt(bEntries, expectedER, numRows)
 		assert.NoError(t, err)
-		err = UpdateBigNumberB(bMatrix, eMatrix, numRows, indices, subMatrixInverse)
+		err = UpdateBigNumberB(bMatrix, eMatrix, numRows, rowOperation)
 		assert.NoError(t, err)
 		zero := bignumber.NewFromInt64(0)
 		for i := 0; i < numRows; i++ {
@@ -500,16 +531,24 @@ func TestUpdateXBigNumber_Int64(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Compute the expected XER
+			// TODO update this to test non-swap permutations
 			var erInt64Matrix, expectedXER []int64
 			var erBigNumberMatrix *bigmatrix.BigMatrix
 			var rInverseMatrix []int64
-			subMatrixInverse := []int{0, 1, 1, 0}
-			if indices[0] != numColsInX-2 {
-				// Not the swap of the last two rows
-				_, subMatrixInverse, err = createInversePair(numIndices)
+			var rowOperation *RowOperation
+			if indices[0] == numColsInX-2 {
+				// Swap of the last two rows
+				rowOperation, err = NewFromPermutation(indices, []int{1, 0})
 				assert.NoError(t, err)
+				rInverseMatrix = getFullInt64Matrix(indices, []int{0, 1, 1, 0}, numColsInX)
+			} else {
+				// Not the swap of the last two rows
+				var subMatrix, subMatrixInverse []int
+				subMatrix, subMatrixInverse, err = createInversePair(numIndices)
+				assert.NoError(t, err)
+				rowOperation = NewFromSubMatrices(indices, subMatrix, subMatrixInverse)
+				rInverseMatrix = getFullInt64Matrix(indices, subMatrixInverse, numColsInX)
 			}
-			rInverseMatrix = getFullInt64Matrix(indices, subMatrixInverse, numColsInX)
 			erInt64Matrix, err = multiplyIntInt(eEntries, rInverseMatrix, numColsInX)
 			assert.NoError(t, err)
 			erBigNumberMatrix, err = bigmatrix.NewFromInt64Array(erInt64Matrix, numColsInX, numColsInX)
@@ -518,12 +557,15 @@ func TestUpdateXBigNumber_Int64(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Compute the actual updated xMatrix
+			// subMatrix and subMatrixInverse are not needed except to construct a
+			// rowOperation, because they would have been used to produce erInt64Matrix
+			// before reaching the code under test here.
 			if testNbr == int64Test {
-				err = UpdateXInt64(xMatrix, erInt64Matrix, indices)
+				err = UpdateXInt64(xMatrix, erInt64Matrix, rowOperation)
 				assert.NoError(t, err)
 			}
 			if testNbr == bigNumberTest {
-				err = UpdateXBigNumber(xMatrix, erBigNumberMatrix, indices)
+				err = UpdateXBigNumber(xMatrix, erBigNumberMatrix, rowOperation)
 				assert.NoError(t, err)
 			}
 

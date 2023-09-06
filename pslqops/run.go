@@ -54,48 +54,6 @@ func (bav ByAbsValue) Len() int           { return len(bav) }
 func (bav ByAbsValue) Swap(i, j int)      { bav[i], bav[j] = bav[j], bav[i] }
 func (bav ByAbsValue) Less(i, j int) bool { return bav[i].absValue.Cmp(bav[j].absValue) < 0 }
 
-type HPairStatistics struct {
-	j0              int
-	j1              int
-	sqHj0j0         float64
-	sqHj1j1         float64
-	j1RowTailNormSq float64
-}
-
-func (hps *HPairStatistics) String() string {
-	return fmt.Sprintf(
-		"(j0, j1): (%d, %d); (sqHj0j0, sqHj1j1): (%f, %f); j1RowTailNormSq: %f",
-		hps.j0, hps.j1, hps.sqHj0j0, hps.sqHj1j1, hps.j1RowTailNormSq,
-	)
-}
-
-func (hps *HPairStatistics) Equals(other *HPairStatistics, tolerance float64) bool {
-	if (hps.j0 != other.j0) || (hps.j1 != other.j1) {
-		return false
-	}
-	if math.Abs(hps.sqHj0j0-other.sqHj0j0) > tolerance {
-		return false
-	}
-	if math.Abs(hps.sqHj1j1-other.sqHj1j1) > tolerance {
-		return false
-	}
-	if math.Abs(hps.j1RowTailNormSq-other.j1RowTailNormSq) > tolerance {
-		return false
-	}
-	return true
-}
-
-func (hps *HPairStatistics) GetScore() float64 {
-	if hps.sqHj0j0 > hps.sqHj1j1 {
-		return hps.j1RowTailNormSq / hps.sqHj0j0
-	}
-	return math.MaxFloat64
-}
-
-func (hps *HPairStatistics) GetIndicesAndSubMatrix() ([]int, []int) {
-	return []int{hps.j0, hps.j1}, []int{0, 1, 1, 0}
-}
-
 // New returns a new State from a provided decimal string array
 func New(input []string, gammaStr string) (*State, error) {
 	// retVal is uninitialized
@@ -209,7 +167,7 @@ func New(input []string, gammaStr string) (*State, error) {
 // gamma^j |H[j][j]| is maximized. getR() should pass to maxJ the two
 // parameters, s.h and s.powersOfGamma, of getR(), described above.
 func (s *State) OneIteration(
-	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) ([]int, []int, []int, error),
+	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) (*RowOperation, error),
 ) (bool, error) {
 	// Step 1 of this PSLQ iteration
 	dMatrix, dHasLargeEntry, err := GetInt64D(s.h)
@@ -231,14 +189,14 @@ func (s *State) OneIteration(
 	}
 
 	// Step 2 of this PSLQ iteration
-	var indices, subMatrix, subMatrixInverse []int
-	indices, subMatrix, subMatrixInverse, err = getR(s.h, s.powersOfGamma)
+	var rowOperation *RowOperation
+	rowOperation, err = getR(s.h, s.powersOfGamma)
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not get R: %q", err.Error())
 	}
 
 	// Step 3 of this PSLQ iteration
-	err = s.step3(dMatrix, indices, subMatrix, subMatrixInverse)
+	err = s.step3(dMatrix, rowOperation)
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not update matrices: %q", err.Error())
 	}
@@ -492,10 +450,12 @@ func GetMaxJ(h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber) (int,
 // indices and sub-matrix.
 func GetRClassic(
 	h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-) ([]int, []int, []int, error) {
+) (*RowOperation, error) {
 	j, err := GetMaxJ(h, powersOfGamma)
-
-	return []int{j, j + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, err
+	if err != nil {
+		return nil, fmt.Errorf("GetRClassic: could not get maximum j: %q", err.Error())
+	}
+	return NewFromPermutation([]int{j, j + 1}, []int{1, 0})
 }
 
 func AboutToTerminate(h *bigmatrix.BigMatrix) (bool, error) {
@@ -508,14 +468,15 @@ func AboutToTerminate(h *bigmatrix.BigMatrix) (bool, error) {
 	return lastEntry.IsSmall(), nil
 }
 
-func (s *State) step3(dMatrix []int64, indices, subMatrix, subMatrixInverse []int) error {
+func (s *State) step3(dMatrix []int64, rowOperation *RowOperation) error {
 	// Update H
-	err := PerformRowOp(s.h, indices, subMatrix)
+	err := PerformRowOp(s.h, rowOperation)
 	if err != nil {
 		return fmt.Errorf("OneIteration: could not left-multiply H: %q", err.Error())
 	}
-	if indices[len(indices)-1] <= s.numCols-1 {
-		err = RemoveCorner(s.h, indices)
+	if rowOperation.Indices[len(rowOperation.Indices)-1] <= s.numCols-1 {
+		// Since rowOperation does not just swap the last two rows, a corner needs removing
+		err = RemoveCorner(s.h, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not right-multiply H: %q", err.Error())
 		}
@@ -555,12 +516,12 @@ func (s *State) step3(dMatrix []int64, indices, subMatrix, subMatrixInverse []in
 
 	// Update s.aInt64Matrix or s.aBigNumberMatrix, depending on s.useBigNumber
 	if s.useBigNumber {
-		err = UpdateBigNumberA(s.aBigNumberMatrix, dMatrix, s.numRows, indices, subMatrix)
+		err = UpdateBigNumberA(s.aBigNumberMatrix, dMatrix, s.numRows, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update BigMatrix A: %q", err.Error())
 		}
 	} else {
-		hasLargeEntry, err = UpdateInt64A(s.aInt64Matrix, dMatrix, s.numRows, indices, subMatrix)
+		hasLargeEntry, err = UpdateInt64A(s.aInt64Matrix, dMatrix, s.numRows, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update []int64 A: %q", err.Error())
 		}
@@ -583,26 +544,26 @@ func (s *State) step3(dMatrix []int64, indices, subMatrix, subMatrixInverse []in
 
 	// Update s.bInt64Matrix or s.bBigNumberMatrix, depending on s.useBigNumber
 	if s.useBigNumber {
-		err = UpdateBigNumberB(s.bBigNumberMatrix, eBigNumberMatrix, s.numRows, indices, subMatrixInverse)
+		err = UpdateBigNumberB(s.bBigNumberMatrix, eBigNumberMatrix, s.numRows, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update BigMatrix B: %q", err.Error())
 		}
 
 		// eBigNumberMatrix has now been right-multiplied by R^-1 and can be used to
 		// update updatedRawX
-		err = UpdateXBigNumber(s.updatedRawX, eBigNumberMatrix, indices)
+		err = UpdateXBigNumber(s.updatedRawX, eBigNumberMatrix, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update raw X: %q", err.Error())
 		}
 	} else {
-		hasLargeEntry, err = UpdateInt64B(s.bInt64Matrix, eInt64Matrix, s.numRows, indices, subMatrixInverse)
+		hasLargeEntry, err = UpdateInt64B(s.bInt64Matrix, eInt64Matrix, s.numRows, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update []int64 B: %q", err.Error())
 		}
 
 		// eInt65Matrix has now been right-multiplied by R^-1 and can be used to
 		// update updatedRawX
-		err = UpdateXInt64(s.updatedRawX, eInt64Matrix, indices)
+		err = UpdateXInt64(s.updatedRawX, eInt64Matrix, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update raw X: %q", err.Error())
 		}
@@ -669,75 +630,4 @@ func (s *State) updateRoundOffError(firstIteration bool) error {
 	s.observedRoundOffError.Mul(s.observedRoundOffError, s.roundOffHistoryWeight)
 	s.observedRoundOffError.MulAdd(maxRoundOffError, s.roundOffCurrentWeight)
 	return nil
-}
-
-// getHPairStatistics returns an array, hp, of HPairStatistics and the index i into
-// hp of the best-scoring element of hp. A strategy could be to swap rows hp[i].j0
-// and hp[i].j1.
-func getHPairStatistics(h *bigmatrix.BigMatrix) ([]HPairStatistics, int, error) {
-	numCols := h.NumCols()
-	numDistinctPairs := (numCols * (numCols - 1)) / 2
-	numPairs := numDistinctPairs + numCols
-	retVal := make([]HPairStatistics, numDistinctPairs)
-	sqHAsFloat64 := make([]float64, numPairs)
-
-	// hAsFloat64Ptr, a float64 copy of H on the diagonal and below,
-	// needs to be initialized
-	ijCursor := 0
-	for i := 0; i < numCols; i++ {
-		for j := 0; j <= i; j++ {
-			hj0j1, err := h.Get(i, j)
-			if err != nil {
-				return []HPairStatistics{}, 0,
-					fmt.Errorf("GetHPairStatistics: could not get H[%d][%d]: %q", i, j, err.Error())
-			}
-			hj0j1AsFloat64, _ := hj0j1.AsFloat().Float64()
-			if math.IsInf(hj0j1AsFloat64, 0) {
-				return []HPairStatistics{}, 0,
-					fmt.Errorf("GetHPairStatistics: H[%d][%d] is infinite as a float64", i, j)
-			}
-			sqHAsFloat64[ijCursor] = hj0j1AsFloat64 * hj0j1AsFloat64
-			ijCursor++
-		}
-	}
-
-	// sqHAsFloat64 is fully populated
-	bestIndex, bestScore := -1, math.MaxFloat64
-	for j1, hj1j1Cursor := numCols-1, numPairs-1; j1 > 0; j1-- {
-		sqHj1j1 := sqHAsFloat64[hj1j1Cursor]
-		sqNorm := sqHj1j1
-		hj1j0Cursor := hj1j1Cursor - 1
-		numColsMinusJ0, j1MinusJ0Minus1 := 1+numCols-j1, 0 // Needed to compute retValIndex
-		for j0, hj0j0Cursor := j1-1, hj1j1Cursor-(j1+1); j0 >= 0; j0-- {
-			// retValIndex is the position of (j0,j1) in an array like this for the example where
-			// numCols = 4: (0,1), (0,2), (0,3), (1,2), (1,3), (2,3). At the first entry in this
-			// array for a given j0, when j1 = j0+1, there are (numColsMinusJ0*(numColsMinusJ0-1))/2
-			// entries left in the entire array, so subtract that from numDistinctPairs to get the
-			// index of (j0, j0+1).
-			//
-			// When j1 > j0+1, adjust for where we are in the sub-sequence of entries with the current
-			// value of j0 by subtracting (j1 - j0) - 1 from (numColsMinusJ0*(numColsMinusJ0-1))/2 when
-			// figuring what to subtract from numDistinctPairs. This amounts to adding (j1 - j0) - 1
-			// to the value computed for retValIndex.
-			retValIndex := numDistinctPairs + j1MinusJ0Minus1 - (numColsMinusJ0*(numColsMinusJ0-1))/2
-			sqHj0j0 := sqHAsFloat64[hj0j0Cursor]
-			sqNorm += sqHAsFloat64[hj1j0Cursor]
-			retVal[retValIndex].j1 = j1
-			retVal[retValIndex].j0 = j0
-			retVal[retValIndex].j1RowTailNormSq = sqNorm
-			retVal[retValIndex].sqHj0j0 = sqHj0j0
-			retVal[retValIndex].sqHj1j1 = sqHj1j1
-			score := retVal[retValIndex].GetScore()
-			if score < bestScore {
-				bestScore = score
-				bestIndex = retValIndex
-			}
-			j1MinusJ0Minus1++
-			numColsMinusJ0++
-			hj1j0Cursor--
-			hj0j0Cursor -= j0 + 1
-		}
-		hj1j1Cursor -= j1 + 1
-	}
-	return retVal, bestIndex, nil
 }

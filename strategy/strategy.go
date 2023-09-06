@@ -180,6 +180,7 @@ type bestScoreType struct {
 	indices          []int
 	subMatrix        []int
 	subMatrixInverse []int
+	permutation      []int
 }
 
 // GetFirstImprovement is a primitive that can be used in getR() to choose
@@ -211,20 +212,17 @@ type bestScoreType struct {
 func GetFirstImprovement(
 	h *bigmatrix.BigMatrix, startingJ, maxB int, requireDiagonalSwap ...bool,
 ) (
-	[]int, []int, []int, error,
+	*pslqops.RowOperation, error,
 ) {
 	endingJ := h.NumCols() - 1
 	if endingJ <= startingJ {
-		return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-			fmt.Errorf("stargingJ = %d but must be < %d", startingJ, endingJ)
+		return nil, fmt.Errorf("stargingJ = %d but must be < %d", startingJ, endingJ)
 	}
 	if startingJ < 0 {
-		return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-			fmt.Errorf("stargingJ = %d but must be < 0", startingJ)
+		return nil, fmt.Errorf("stargingJ = %d but must be < 0", startingJ)
 	}
 	if maxB < 1 {
-		return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-			fmt.Errorf("GetFirstImprovement: maxB = %d < 1", maxB)
+		return nil, fmt.Errorf("GetFirstImprovement: maxB = %d < 1", maxB)
 	}
 
 	// Since it is unlikely to move the diagonal with b > 1, search first with b == 1
@@ -233,9 +231,11 @@ func GetFirstImprovement(
 		diagonalSwapIsRequired = false
 	}
 	bestScore := bestScoreType{
-		score:     1.0,
-		indices:   []int{endingJ, endingJ + 1},
-		subMatrix: []int{0, 1, 1, 0},
+		score:            1.0,
+		indices:          []int{endingJ, endingJ + 1},
+		subMatrix:        []int{},
+		subMatrixInverse: []int{},
+		permutation:      []int{1, 0},
 	}
 	for b := 1; b <= maxB; b++ {
 		// Since small j is preferred, search small j first while checking all a for each j,
@@ -245,18 +245,21 @@ func GetFirstImprovement(
 			var u, v, w *bignumber.BigNumber
 			u, err = h.Get(j, j)
 			if err != nil {
-				return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-					fmt.Errorf("GetFirstImprovement: could not get H[%d][%d]: %q", j, j, err.Error())
+				return nil, fmt.Errorf(
+					"GetFirstImprovement: could not get H[%d][%d]: %q", j, j, err.Error(),
+				)
 			}
 			v, err = h.Get(j+1, j)
 			if err != nil {
-				return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-					fmt.Errorf("GetFirstImprovement: could not get H[%d][%d]: %q", j, j, err.Error())
+				return nil, fmt.Errorf(
+					"GetFirstImprovement: could not get H[%d][%d]: %q", j, j, err.Error(),
+				)
 			}
 			w, err = h.Get(j+1, j+1)
 			if err != nil {
-				return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-					fmt.Errorf("GetFirstImprovement: could not get H[%d][%d]: %q", j, j, err.Error())
+				return nil, fmt.Errorf(
+					"GetFirstImprovement: could not get H[%d][%d]: %q", j, j, err.Error(),
+				)
 			}
 			absU := bignumber.NewFromInt64(0).Abs(u)
 			absW := bignumber.NewFromInt64(0).Abs(w)
@@ -280,58 +283,76 @@ func GetFirstImprovement(
 					_, uStr := u.String()
 					_, vStr := v.String()
 					_, wStr := w.String()
-					return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-						fmt.Errorf("GetFirstImprovement: error scoring a = %d, b = %d, u = %q, v = %q, w = %q]: %q",
-							a, b, uStr, vStr, wStr, err.Error(),
-						)
+					return nil, fmt.Errorf(
+						"GetFirstImprovement: error scoring a = %d, b = %d, u = %q, v = %q, w = %q]: %q",
+						a, b, uStr, vStr, wStr, err.Error(),
+					)
 				}
 				if movesDiagonal {
 					if a == 0 {
-						// 2x2 with rows [0 1] [1 0] has determinant -1
-						return []int{j, j + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, nil
+						var rowOperation *pslqops.RowOperation
+						rowOperation, err = pslqops.NewFromPermutation([]int{j, j + 1}, []int{1, 0})
+						if err != nil {
+							return nil, fmt.Errorf("GetR: could not create a row operation: %q", err.Error())
+						}
+						return rowOperation, nil
 					}
 
-					// 2x2 with rows [1 b] [0 -1] or [-1 b] [0 1] has determinant -1
-					return []int{j, j + 1}, []int{a, b, 0, -a}, []int{a, b, 0, -a}, nil
+					// A 2x2 matrix with rows [1 b] [0 -1] or [-1 b] [0 1] is its own inverse
+					return pslqops.NewFromSubMatrices(
+						[]int{j, j + 1}, []int{a, b, 0, -a}, []int{a, b, 0, -a},
+					), nil
 				}
 				if (score != nil) && (*score > bestScore.score) {
 					bestScore.score = *score
 					if a == 0 {
 						bestScore.indices = []int{j, j + 1}
-						bestScore.subMatrix = []int{0, 1, 1, 0}
-						bestScore.subMatrixInverse = []int{0, 1, 1, 0}
+						bestScore.subMatrix = []int{}
+						bestScore.subMatrixInverse = []int{}
+						bestScore.permutation = []int{1, 0}
 					} else {
 						// When |a| = 1 as in this case, the matrix with entries a, b, 0, -a
 						// is its own inverse.
 						bestScore.indices = []int{j, j + 1}
 						bestScore.subMatrix = []int{a, b, 0, -a}
 						bestScore.subMatrixInverse = []int{a, b, 0, -a}
+						bestScore.permutation = []int{}
 					}
 				}
 			}
 		}
 	}
 	if (!diagonalSwapIsRequired) && (bestScore.score > 1.0) {
-		return bestScore.indices, bestScore.subMatrix, bestScore.subMatrixInverse, nil
+		// No diagonal moves were found but bestScore does offer a way to improve the diagonal
+		if len(bestScore.permutation) != 0 {
+			return pslqops.NewFromPermutation(bestScore.indices, bestScore.permutation)
+		}
+		return pslqops.NewFromSubMatrices(
+			bestScore.indices, bestScore.subMatrix, bestScore.subMatrixInverse,
+		), nil
 	}
-	return []int{endingJ, endingJ + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, nil
+
+	// No diagonal swap was found. The last two rows need to be swapped, since either
+	// - Diagonal swaps are required, or
+	// - Diagonal swaps are not required, but no diagonal improvement was found
+	return pslqops.NewFromPermutation([]int{endingJ, endingJ + 1}, []int{1, 0})
 }
 
 func ImproveDiagonalNever(
 	h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-) ([]int, []int, []int, error) {
+) (*pslqops.RowOperation, error) {
 	return getR(h, powersOfGamma, improveDiagonalNever)
 }
 
 func ImproveDiagonalWhenAboutToTerminate(
 	h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-) ([]int, []int, []int, error) {
+) (*pslqops.RowOperation, error) {
 	return getR(h, powersOfGamma, improveDiagonalWhenAboutToTerminate)
 }
 
 func ImproveDiagonalAlways(
 	h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
-) ([]int, []int, []int, error) {
+) (*pslqops.RowOperation, error) {
 	return getR(h, powersOfGamma, improveDiagonalAlways)
 }
 
@@ -339,10 +360,8 @@ func ImproveDiagonalAlways(
 // to embed in a matrix that is otherwise the identity of dimension h.NumCols().
 func getR(
 	h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber, whenToImprove int,
-) ([]int, []int, []int, error) {
+) (*pslqops.RowOperation, error) {
 	lastCol := h.NumCols() - 1
-	lastRow := h.NumRows() - 1
-	var indices, subMatrix, subMatrixInverse []int
 	var err error
 	improveDiagonal := false // default whenToImprove is improveDiagonalNever
 	switch whenToImprove {
@@ -375,38 +394,38 @@ func getR(
 		var startingJ int
 		startingJ, err = pslqops.GetMaxJ(h, nil)
 		if err != nil {
-			return []int{lastCol, lastCol + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, fmt.Errorf(
-				"GetRImprovingDiagonal: could not get h[%d][%d]: %q",
-				lastRow, lastCol, err.Error(),
+			return nil, fmt.Errorf(
+				"GetR: could not get max diagonal element of H: %q", err.Error(),
 			)
 		}
 		if startingJ == lastCol {
 			// The maximum is already in the last column
-			return []int{lastCol, lastCol + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, nil
+			return pslqops.NewFromPermutation([]int{lastCol, lastCol + 1}, []int{1, 0})
 		}
 
 		// The maximum is before the last column and needs to be moved down, if possible
-		indices, subMatrix, subMatrixInverse, err = GetFirstImprovement(h, startingJ, maxB)
+		var rowOperation *pslqops.RowOperation
+		rowOperation, err = GetFirstImprovement(h, startingJ, maxB)
 		if err != nil {
-			return []int{lastCol, lastCol + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, fmt.Errorf(
-				"GetRImprovingDiagonal: could not get a diagonal swap starting with H[%d][%d]: %q",
+			return nil, fmt.Errorf(
+				"GetR: could not get a diagonal swap starting with H[%d][%d]: %q",
 				startingJ, startingJ, err.Error(),
 			)
 		}
-		if indices[0] == lastCol {
+		if rowOperation.Indices[0] == lastCol {
 			// No diagonal swap was found to improve the diagonal. Try not requiring a swap
-			indices, subMatrix, subMatrixInverse, err = GetFirstImprovement(h, startingJ, maxB, false)
+			rowOperation, err = GetFirstImprovement(h, startingJ, maxB, false)
 			if err != nil {
-				return []int{lastCol, lastCol + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, fmt.Errorf(
+				return nil, fmt.Errorf(
 					"GetRImprovingDiagonal: could not improve diagonal starting with H[%d][%d]: %q",
 					startingJ, startingJ, err.Error(),
 				)
 			}
-			return indices, subMatrix, subMatrixInverse, nil
+			return rowOperation, nil
 		}
 
 		// There is a diagonal swap to return
-		return indices, subMatrix, subMatrixInverse, nil
+		return rowOperation, nil
 	}
 
 	// The last element of H is not small, or the strategy does not call for improving the
@@ -415,10 +434,12 @@ func getR(
 	var j int
 	j, err = pslqops.GetMaxJ(h, powersOfGamma)
 	if err != nil {
-		return []int{lastCol, lastCol + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0},
-			fmt.Errorf("GetRImprovingDiagonal: could not get maximum diagonal element of H: %q", err.Error())
+		return nil, fmt.Errorf(
+			"GetRImprovingDiagonal: could not get maximum diagonal element of H: %q",
+			err.Error(),
+		)
 	}
-	return []int{j, j + 1}, []int{0, 1, 1, 0}, []int{0, 1, 1, 0}, nil
+	return pslqops.NewFromPermutation([]int{j, j + 1}, []int{1, 0})
 }
 
 // getDeltaSquared returns the Bignumber whose value is the (0,0) entry,

@@ -260,6 +260,127 @@ func (bm *BigMatrix) Transpose(x *BigMatrix) (*BigMatrix, error) {
 	return bm, nil
 }
 
+// PermuteRows performs the row operation on bm:
+// row cycles[i][0] -> row cycles[i][1], row cycles[i][1] -> row cycles[i][2], etc.
+// for i in {0,...,len(cycles)-1}.
+//
+// Each cycles[i][j] must contain a valid row number for bm, or an error is returned.
+// PermuteRows does not verify that cycles represents a valid permutation of the
+// rows of bm.
+func (bm *BigMatrix) PermuteRows(cycles [][]int) error {
+	if len(cycles) == 0 {
+		return fmt.Errorf("PermuteRows: permutation was empty")
+	}
+	numCols := bm.NumCols()
+	for i := 0; i < len(cycles); i++ {
+		cycleLen := len(cycles[i])
+		overwritten := make([]*bignumber.BigNumber, numCols)
+		for j := 0; j < cycleLen; j++ {
+			sourceRow := cycles[i][j]
+			var destRow int
+			if j+1 == cycleLen {
+				destRow = cycles[i][0]
+			} else {
+				destRow = cycles[i][j+1]
+			}
+			for k := 0; k < numCols; k++ {
+				var err error
+				var sourceEntry *bignumber.BigNumber
+				var destEntry *bignumber.BigNumber
+				if j == 0 {
+					// In this iteration of the cycle, overwritten is an array of nil pointers
+					sourceEntry, err = bm.Get(sourceRow, k)
+					if err != nil {
+						return fmt.Errorf(
+							"PermuteRows: could not get bm[%d][%d]: %q", sourceRow, k, err.Error(),
+						)
+					}
+				} else {
+					// In this iteration of the cycle, overwritten contains the contents
+					// of the row just overwritten from before it was overwritten.
+					sourceEntry = overwritten[k]
+				}
+				destEntry, err = bm.Get(destRow, k)
+				if err != nil {
+					return fmt.Errorf(
+						"PermuteRows: could not get bm[%d][%d]: %q", destRow, k, err.Error(),
+					)
+				}
+				overwritten[k] = bignumber.NewFromInt64(0).Set(destEntry)
+				err = bm.Set(destRow, k, sourceEntry)
+				if err != nil {
+					return fmt.Errorf(
+						"PermuteRows: could not set bm[%d][%d]: %q", destRow, k, err.Error(),
+					)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// PermuteColumns performs the column operation on bm:
+// column cycles[i][0] -> column cycles[i][1], column cycles[i][1] -> column cycles[i][2], etc.
+// for i in {0,...,len(cycles)-1}.
+//
+// Each cycles[i][j] must contain a valid column number for bm, or an error is returned.
+// PermuteColumns does not verify that cycles represents a valid permutation of the
+// columns of bm.
+func (bm *BigMatrix) PermuteColumns(cycles [][]int) error {
+	if len(cycles) == 0 {
+		return fmt.Errorf("PermuteColumns: permutation was empty")
+	}
+	numRows := bm.NumRows()
+	for i := 0; i < len(cycles); i++ {
+		cycleLen := len(cycles[i])
+		overwritten := make([]*bignumber.BigNumber, numRows)
+		for j := 0; j < cycleLen; j++ {
+			sourceCol := cycles[i][j]
+			var destCol int
+			if j+1 == cycleLen {
+				destCol = cycles[i][0]
+			} else {
+				destCol = cycles[i][j+1]
+			}
+			for k := 0; k < numRows; k++ {
+				var err error
+				var sourceEntry *bignumber.BigNumber
+				var destEntry *bignumber.BigNumber
+				if j == 0 {
+					// In this iteration of the cycle, overwritten is an array of nil pointers
+					sourceEntry, err = bm.Get(k, sourceCol)
+					if err != nil {
+						return fmt.Errorf(
+							"PermuteColumns: could not get bm[%d][%d]: %q",
+							k, sourceCol, err.Error(),
+						)
+					}
+				} else {
+					// In this iteration of the cycle, overwritten contains the contents
+					// of the column just overwritten from before it was overwritten.
+					sourceEntry = overwritten[k]
+				}
+				destEntry, err = bm.Get(k, destCol)
+				if err != nil {
+					return fmt.Errorf(
+						"PermuteColumns: could not get bm[%d][%d]: %q",
+						k, destCol, err.Error(),
+					)
+				}
+				overwritten[k] = bignumber.NewFromInt64(0).Set(destEntry)
+				err = bm.Set(k, destCol, sourceEntry)
+				if err != nil {
+					return fmt.Errorf(
+						"PermuteColumns: could not set bm[%d][%d]: %q",
+						k, destCol, err.Error(),
+					)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // Set sets the value in row i, column j to x. This is a deep
 // copy.
 func (bm *BigMatrix) Set(i int, j int, x *bignumber.BigNumber) error {
