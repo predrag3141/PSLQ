@@ -3,10 +3,12 @@
 package pslqops
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"pslq/bigmatrix"
 	"pslq/bignumber"
+	"pslq/util"
 	"testing"
 )
 
@@ -85,10 +87,10 @@ func TestPerformRowOp(t *testing.T) {
 			var err error
 			var rowOperation *RowOperation
 			numIndices := 2 + rand.Intn(numCols-2)
-			indices := getIndices(numIndices, numCols)
+			indices := util.GetIndices(numIndices, numCols)
 			switch rowOpType {
 			case rowPermutation:
-				perm := getPermutation(numIndices)
+				perm := util.GetPermutation(numIndices)
 				rowOperation, err = NewFromPermutation(indices, perm)
 				assert.NoError(t, err)
 				subMatrix = make([]int, numIndices*numIndices)
@@ -97,7 +99,7 @@ func TestPerformRowOp(t *testing.T) {
 				}
 				break
 			case generalRowOp:
-				subMatrix, subMatrixInverse, err = createInversePair(numIndices)
+				subMatrix, subMatrixInverse, err = util.CreateInversePair(numIndices)
 				assert.NoError(t, err)
 				rowOperation = &RowOperation{
 					Indices:        indices,
@@ -177,11 +179,11 @@ func TestRemoveCorner(t *testing.T) {
 			var rowOperation *RowOperation
 			var intA, intB []int
 			numIndices := 2 + rand.Intn(numCols-1)
-			indices := getIndices(numIndices, numCols)
+			indices := util.GetIndices(numIndices, numCols)
 			switch rowOpType {
 			case rowPermutation:
 				intA, intB = make([]int, numIndices*numIndices), make([]int, numIndices*numIndices)
-				perm := getPermutation(numIndices)
+				perm := util.GetPermutation(numIndices)
 				rowOperation, err = NewFromPermutation(indices, perm)
 				assert.NoError(t, err)
 				for i := 0; i < numIndices; i++ {
@@ -199,7 +201,7 @@ func TestRemoveCorner(t *testing.T) {
 				)
 				break
 			case generalRowOp:
-				intA, intB, err = createInversePair(numIndices)
+				intA, intB, err = util.CreateInversePair(numIndices)
 				assert.NoError(t, err)
 				rowOperation = &RowOperation{
 					Indices:        indices,
@@ -212,9 +214,9 @@ func TestRemoveCorner(t *testing.T) {
 				break
 			}
 			var areInverses bool
-			int64A := copyIntToInt64(intA)
-			int64B := copyIntToInt64(intB)
-			areInverses, err = isInversePair(int64A, int64B, numIndices)
+			int64A := util.CopyIntToInt64(intA)
+			int64B := util.CopyIntToInt64(intB)
+			areInverses, err = util.IsInversePair(int64A, int64B, numIndices)
 			assert.NoError(t, err)
 			assert.True(
 				t, areInverses, "intA = %v and intB = %v should be inverses", intA, intB,
@@ -302,4 +304,20 @@ func detH(t *testing.T, h *bigmatrix.BigMatrix) *bignumber.BigNumber {
 		det.Mul(det, hii)
 	}
 	return det
+}
+
+// getFullBigNumberMatrix creates a numRows x numRows matrix that is the identity
+// except where the row and column number are both in the array, indices. At those
+// locations, the corresponding entry in subMatrix replaces the 0 or 1 from the
+// numRows x numRows identity matrix.
+func getFullBigNumberMatrix(indices, subMatrix []int, numRows int) (*bigmatrix.BigMatrix, error) {
+	int64RetVal := util.GetFullInt64Matrix(indices, subMatrix, numRows)
+	retVal, err := bigmatrix.NewFromInt64Array(int64RetVal, numRows, numRows)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"getFullBigNumberMatrix: could not convert %d x %d int64RetVal to bigNumber: %q ",
+			numRows, numRows, err.Error(),
+		)
+	}
+	return retVal, nil
 }

@@ -271,48 +271,38 @@ func (bm *BigMatrix) PermuteRows(cycles [][]int) error {
 	if len(cycles) == 0 {
 		return fmt.Errorf("PermuteRows: permutation was empty")
 	}
-	numCols := bm.NumCols()
+	numRows, numCols := bm.Dimensions()
 	for i := 0; i < len(cycles); i++ {
 		cycleLen := len(cycles[i])
 		overwritten := make([]*bignumber.BigNumber, numCols)
 		for j := 0; j < cycleLen; j++ {
 			sourceRow := cycles[i][j]
+			if (sourceRow < 0) || (numRows <= sourceRow) {
+				return fmt.Errorf("PermuteRows: cycle contains row %d not in {0,...,%d}\"", sourceRow, numRows-1)
+			}
 			var destRow int
 			if j+1 == cycleLen {
 				destRow = cycles[i][0]
 			} else {
 				destRow = cycles[i][j+1]
 			}
+			if (destRow < 0) || (numRows <= destRow) {
+				return fmt.Errorf(
+					"PermuteRows: cycle contains row %d not in {0,...,%d}\"", destRow, numRows-1,
+				)
+			}
 			for k := 0; k < numCols; k++ {
-				var err error
 				var sourceEntry *bignumber.BigNumber
-				var destEntry *bignumber.BigNumber
 				if j == 0 {
 					// In this iteration of the cycle, overwritten is an array of nil pointers
-					sourceEntry, err = bm.Get(sourceRow, k)
-					if err != nil {
-						return fmt.Errorf(
-							"PermuteRows: could not get bm[%d][%d]: %q", sourceRow, k, err.Error(),
-						)
-					}
+					sourceEntry = bm.values[sourceRow*bm.numCols+k]
 				} else {
 					// In this iteration of the cycle, overwritten contains the contents
 					// of the row just overwritten from before it was overwritten.
 					sourceEntry = overwritten[k]
 				}
-				destEntry, err = bm.Get(destRow, k)
-				if err != nil {
-					return fmt.Errorf(
-						"PermuteRows: could not get bm[%d][%d]: %q", destRow, k, err.Error(),
-					)
-				}
-				overwritten[k] = bignumber.NewFromInt64(0).Set(destEntry)
-				err = bm.Set(destRow, k, sourceEntry)
-				if err != nil {
-					return fmt.Errorf(
-						"PermuteRows: could not set bm[%d][%d]: %q", destRow, k, err.Error(),
-					)
-				}
+				overwritten[k] = bm.values[destRow*bm.numCols+k]
+				bm.values[destRow*bm.numCols+k] = sourceEntry
 			}
 		}
 	}
@@ -330,17 +320,27 @@ func (bm *BigMatrix) PermuteColumns(cycles [][]int) error {
 	if len(cycles) == 0 {
 		return fmt.Errorf("PermuteColumns: permutation was empty")
 	}
-	numRows := bm.NumRows()
+	numRows, numCols := bm.Dimensions()
 	for i := 0; i < len(cycles); i++ {
 		cycleLen := len(cycles[i])
 		overwritten := make([]*bignumber.BigNumber, numRows)
 		for j := 0; j < cycleLen; j++ {
 			sourceCol := cycles[i][j]
 			var destCol int
+			if (sourceCol < 0) || (numCols <= sourceCol) {
+				return fmt.Errorf(
+					"PermuteCols: cycle contains column %d not in {0,...,%d}\n", sourceCol, numCols-1,
+				)
+			}
 			if j+1 == cycleLen {
 				destCol = cycles[i][0]
 			} else {
 				destCol = cycles[i][j+1]
+			}
+			if (destCol < 0) || (numCols <= destCol) {
+				return fmt.Errorf(
+					"PermuteCols: cycle contains column %d not in {0,...,%d}", destCol, numCols-1,
+				)
 			}
 			for k := 0; k < numRows; k++ {
 				var err error
@@ -348,13 +348,7 @@ func (bm *BigMatrix) PermuteColumns(cycles [][]int) error {
 				var destEntry *bignumber.BigNumber
 				if j == 0 {
 					// In this iteration of the cycle, overwritten is an array of nil pointers
-					sourceEntry, err = bm.Get(k, sourceCol)
-					if err != nil {
-						return fmt.Errorf(
-							"PermuteColumns: could not get bm[%d][%d]: %q",
-							k, sourceCol, err.Error(),
-						)
-					}
+					sourceEntry = bm.values[k*numCols+sourceCol]
 				} else {
 					// In this iteration of the cycle, overwritten contains the contents
 					// of the column just overwritten from before it was overwritten.

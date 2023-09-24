@@ -151,6 +151,24 @@ func NewFromSubMatrices(indices, subMatrix, subMatrixInverse []int) *RowOperatio
 // The variable, permutation, is interpreted to map indices[i] to indices[permutation[i]]
 // for all i. This means that permutation[i] must be in {0,1,...,len(indices)-1}
 func NewFromPermutation(indices, permutation []int) (*RowOperation, error) {
+	// The permutations of H and B are the same, but are stored separately
+	// in case there is ever a reason to make them different. The reason these
+	// permutations are the same is that
+	// - Row i of a row operation matrix S for permutation phi has a 1 at
+	//   phi^-1(i); i.e., S[i, phi^-1(i)] = 1
+	// - Column i of a column operation matrix T for permutation phi has 1 at
+	//   phi^-1(i); i.e. T[phi^-1(i), i] = 1
+	// - This means that S and T are transposes of each other. For permutation
+	//   matrices, transposes are inverses, so T = S^-1.
+	//
+	// Example:
+	// - phi: 0 -> 1 -> 2 -> 0
+	// - S = 0 0 1          The rows of S have 1s in columns 2, 0 and 1, respectively,
+	//       1 0 0          because phi^-1(0) = 2, phi^-1(1) = 0 and phi^-1(2) = 1.
+	//       0 1 0
+	// - T = 0 1 0          The columns of T have 1s in rows 2, 0 and 1, respectively,
+	//       0 0 1 = S^-1   again because phi^-1(0) = 2, phi^-1(1) = 0 and phi^-1(2) = 1.
+	//       1 0 0
 	var permutationOfH [][]int
 	var permutationOfB [][]int
 	numIndices := len(indices)
@@ -167,9 +185,11 @@ func NewFromPermutation(indices, permutation []int) (*RowOperation, error) {
 			// Current cycle has length 1 and is ignored.
 			continue
 		}
-		cycle := []int{indices[sourcePos]}
+		cycleH := []int{indices[sourcePos]}
+		cycleB := []int{indices[sourcePos]}
 		for destPos != startPos {
-			cycle = append(cycle, indices[destPos])
+			cycleH = append(cycleH, indices[destPos])
+			cycleB = append(cycleB, indices[destPos])
 			if used[destPos] {
 				return nil, fmt.Errorf(
 					"NewFromPermutation: %v is not a permutation", permutation,
@@ -179,15 +199,8 @@ func NewFromPermutation(indices, permutation []int) (*RowOperation, error) {
 			sourcePos = destPos
 			destPos = permutation[sourcePos]
 		}
-
-		// The last cycle has length > 1
-		permutationOfH = append(permutationOfH, cycle)
-		cycleLen := len(cycle)
-		inverseCycle := make([]int, cycleLen)
-		for i := 0; i < cycleLen; i++ {
-			inverseCycle[cycleLen-(i+1)] = cycle[i]
-		}
-		permutationOfB = append(permutationOfB, inverseCycle)
+		permutationOfH = append(permutationOfH, cycleH)
+		permutationOfB = append(permutationOfB, cycleB)
 	}
 	if len(permutationOfH) == 0 {
 		return nil, fmt.Errorf(
@@ -278,6 +291,9 @@ func (ro *RowOperation) ValidateAll(numRows, numCols int, caller string) error {
 	return ro.ValidateIndices(numRows, numCols, caller)
 }
 
+// Equals returns whether ro is equal to other. In the case where ro and other contain
+// permutations, equality means the cycles in ro and other come in the same order,
+// though the starting point of cycles in ro can differ from their counterparts in other.
 func (ro *RowOperation) Equals(other *RowOperation) bool {
 	// Equality of Indices
 	if len(ro.Indices) != len(other.Indices) {
@@ -309,38 +325,45 @@ func (ro *RowOperation) Equals(other *RowOperation) bool {
 		}
 	}
 
-	// Equality of PermutationOfH
-	if len(ro.PermutationOfH) != len(other.PermutationOfH) {
+	// Equality of PermutationOfH and PermutationOfB
+	if !permutationsAreEqual(ro.PermutationOfH, other.PermutationOfH) {
 		return false
 	}
-	for i := 0; i < len(ro.PermutationOfH); i++ {
-		if len(ro.PermutationOfH[i]) != len(other.PermutationOfH[i]) {
-			return false
-		}
-		for j := 0; j < len(ro.PermutationOfH[i]); j++ {
-			if ro.PermutationOfH[i][j] != other.PermutationOfH[i][j] {
-				return false
-			}
-		}
-	}
-
-	// Equality of PermutationOfB
-	if len(ro.PermutationOfB) != len(other.PermutationOfB) {
-		return false
-	}
-	for i := 0; i < len(ro.PermutationOfB); i++ {
-		if len(ro.PermutationOfB[i]) != len(other.PermutationOfB[i]) {
-			return false
-		}
-		for j := 0; j < len(ro.PermutationOfB[i]); j++ {
-			if ro.PermutationOfB[i][j] != other.PermutationOfB[i][j] {
-				return false
-			}
-		}
-	}
-	return true
+	return permutationsAreEqual(ro.PermutationOfB, other.PermutationOfB)
 }
 
 func (ro *RowOperation) IsPermutation() bool {
 	return len(ro.PermutationOfH) != 0
+}
+
+func permutationsAreEqual(x [][]int, y [][]int) bool {
+	xLen := len(x)
+	if len(y) != xLen {
+		return false
+	}
+	for i := 0; i < xLen; i++ {
+		cycleLen := len(x[i])
+		if cycleLen != len(y[i]) {
+			return false
+		}
+		equalsAtSomeOffset := false
+		for offset := 0; offset < cycleLen; offset++ {
+			equalsAtThisOffset := true
+			for j := 0; j < cycleLen; j++ {
+				offsetOfJ := j + (offset % cycleLen)
+				if x[i][offsetOfJ] != y[i][offsetOfJ] {
+					equalsAtThisOffset = false
+					break
+				}
+			}
+			if equalsAtThisOffset {
+				equalsAtSomeOffset = true
+				break
+			}
+		}
+		if !equalsAtSomeOffset {
+			return false
+		}
+	}
+	return true
 }

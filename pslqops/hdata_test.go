@@ -1,10 +1,12 @@
 package pslqops
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math"
 	"math/rand"
 	"pslq/bigmatrix"
+	"pslq/util"
 	"testing"
 )
 
@@ -72,4 +74,77 @@ func TestGetHPairStatistics(t *testing.T) {
 			i, expectedHPairStatistics[i].String(), actualHPairStatistics[i].String(), i,
 		)
 	}
+}
+
+func TestNewFromPermutation(t *testing.T) {
+	const minSeed = 7849573
+	const seedIncr = 2343
+	const numTests = 100
+	const maxNumIndices = 15
+	const maxNumCols = 100
+
+	counts := make([]int, maxNumIndices)
+	for testNbr := 0; testNbr < numTests; testNbr++ {
+		// Need random indices and permutation from which to create a test instance of RowOperation,
+		rand.Seed(int64(minSeed + testNbr*seedIncr))
+		numIndices := 2 + rand.Intn(maxNumIndices-2)
+		counts[numIndices]++
+		numCols := numIndices + rand.Intn(maxNumCols-numIndices)
+		perm := util.GetPermutation(numIndices)
+		indices := util.GetIndices(numIndices, numCols)
+
+		// Need a test instance of RowOperation
+		rowOperation, err := NewFromPermutation(indices, perm)
+		assert.NoError(t, err)
+
+		// Need to check that the cycles of rowOperation match perm, i.e.
+		//
+		// If cycles[k] == indices[m1] and cycles[k+1] == indices[m2], then
+		// perm[m1] == m2. Also, m1 and m2 exist for any cycles[k]
+		//
+		// Inside the for-k loop below, m1 and m2 are found and it is verified that
+		// perm[m1] == m2.
+		//
+		// It is not practical to construct an expected permutation to compare with
+		// rowOperation. This would be a repetition of the code that is already in
+		// NewFromPermutation(). Instead, test agreement of perm with the cycles in
+		// rowOperation.PermutationOfH and rowOperation.PermutationOfB.
+		for _, cycles := range [][][]int{rowOperation.PermutationOfH, rowOperation.PermutationOfB} {
+			numCycles := len(cycles)
+			for j := 0; j < numCycles; j++ {
+				cycle := cycles[j]
+				cycleLen := len(cycle)
+				for k := 0; k < cycleLen; k++ {
+					// It is expected that for some indexOfCycleK and indexOfNext,
+					// - cycle[k] == indices[indexOfCycleK]
+					// - cycle[(k+1)%cycleLen] == indices[indexOfNext]
+					// - perm[indexOfCycleK] == indexOfNext
+					// This is what it means for cycle to match perm
+					m1, m2 := math.MaxInt, math.MaxInt
+					for m := 0; m < numIndices; m++ {
+						if indices[m] == cycle[k] {
+							// cycle[k] is found in indices
+							m1 = m
+						}
+						if indices[m] == cycle[(k+1)%cycleLen] {
+							// cycle[k+1] is found in indices
+							m2 = m
+						}
+					}
+					assert.Less(t, m1, numIndices) // cycle[k] was found in indices
+					assert.Less(t, m2, numIndices) // cycle[k+1] was found in indices
+					assert.Equalf(
+						t, m2, perm[m1],
+						"indices=%v; cycle=%v; perm=%v; indices[%d]=cycle[%d]; indices[%d] follows cycle[%d]",
+						indices, cycle, perm, m1, k, m2, k,
+					)
+				}
+			}
+		}
+	}
+	fmt.Printf("(n, number of times numIndices was n): ")
+	for n := 0; n < maxNumIndices; n++ {
+		fmt.Printf("(%d, %d) ", n, counts[n])
+	}
+	fmt.Printf("\n")
 }

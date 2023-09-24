@@ -7,6 +7,7 @@ import (
 	"math"
 	"pslq/bigmatrix"
 	"pslq/bignumber"
+	"pslq/util"
 )
 
 // GetInt64D returns the integer array that best emulates the defining property of
@@ -98,6 +99,20 @@ func GetInt64D(h *bigmatrix.BigMatrix, computeFromD0Optional ...bool) ([]int64, 
 		}
 	}
 	return dMatrix, containsLargeEntry, nil
+}
+
+func printInt64Matrix(name string, x []int64, numRows, numCols int) {
+	blanks := "         "
+	fmt.Printf("%s:\n%s", name, blanks)
+	for i := 0; i < numRows; i++ {
+		for j := 0; j < numCols; j++ {
+			fmt.Printf(" %5d", x[i*numCols+j])
+		}
+		fmt.Printf("\n")
+		if i < numRows-1 {
+			fmt.Printf("%s", blanks)
+		}
+	}
 }
 
 // GetInt64E returns the inverse of dMatrix, provided that dMatrix is a lower
@@ -275,11 +290,11 @@ func UpdateInt64A(aMatrix, dMatrix []int64, numRows int, rowOperation *RowOperat
 			if dotLen == 0 {
 				newAIK = aMatrix[i*numRows+k]
 			} else if dotLen < numRows {
-				newAIK = dotProduct(
+				newAIK = util.DotProduct(
 					dMatrix, numRows, aMatrix, numRows, i, k, 0, dotLen,
 				) + aMatrix[i*numRows+k]
 			} else {
-				newAIK = dotProduct(
+				newAIK = util.DotProduct(
 					dMatrix, numRows, aMatrix, numRows, i, k, 0, dotLen,
 				)
 			}
@@ -438,11 +453,11 @@ func UpdateInt64B(bMatrix, eMatrix []int64, numRows int, rowOperation *RowOperat
 				// The dot product does not need to be computed
 				newBKI = bMatrix[k*numRows+dotStart-1]
 			} else if dotStart > 0 {
-				newBKI = bMatrix[k*numRows+dotStart-1] + dotProduct(
+				newBKI = bMatrix[k*numRows+dotStart-1] + util.DotProduct(
 					bMatrix, numRows, eMatrix, numRows, k, i, dotStart, numRows,
 				)
 			} else {
-				newBKI = dotProduct(
+				newBKI = util.DotProduct(
 					bMatrix, numRows, eMatrix, numRows, k, i, dotStart, numRows,
 				)
 			}
@@ -605,7 +620,7 @@ func dToRD(dMatrix []int64, numRows int, rowOperation *RowOperation) error {
 	for i := 0; i < numIndices; i++ {
 		for j := 0; j < numRows; j++ {
 			// D is lower triangular, so the dot product can begin at row j of D
-			newSubMatrixOfD[cursor] = dotProduct(
+			newSubMatrixOfD[cursor] = util.DotProduct(
 				int64SubMatrix, numRows, dMatrix, numRows, i, j, j, numRows,
 			)
 			cursor++
@@ -647,7 +662,7 @@ func int64EToERInverse(eMatrix []int64, numRows int, rowOperation *RowOperation)
 	for i := 0; i < numRows; i++ {
 		for j := 0; j < numIndices; j++ {
 			// E is lower triangular, so the dot product can end at column i of E
-			newSubMatrixOfE[cursor] = dotProduct(
+			newSubMatrixOfE[cursor] = util.DotProduct(
 				eMatrix, numRows, int64SubMatrix, numIndices, i, j, 0, i+1,
 			)
 			cursor++
@@ -712,19 +727,6 @@ func bigNumberEToERInverse(eMatrix *bigmatrix.BigMatrix, rowOperation *RowOperat
 		}
 	}
 	return nil
-}
-
-// getDimensions returns the dimensions m and p for a matrix multiply
-// xy where x has mn entries, y has np entries, and the number of columns
-// in x (= the number of rows in y) is n.
-func getDimensions(mn, np, n int) (int, int, error) {
-	if mn%n != 0 {
-		return 0, 0, fmt.Errorf("multiplyIntFloat: non-integer number of rows %d / %d in x", mn, n)
-	}
-	if np%n != 0 {
-		return 0, 0, fmt.Errorf("multiplyIntFloat: non-integer number of columns  %d / %d in y", np, n)
-	}
-	return mn / n, np / n, nil
 }
 
 func getRatios(h *bigmatrix.BigMatrix) ([]float64, error) {

@@ -8,6 +8,7 @@ import (
 	"math"
 	"pslq/bigmatrix"
 	"pslq/bignumber"
+	"pslq/util"
 	"sort"
 )
 
@@ -208,6 +209,7 @@ func (s *State) OneIteration(
 			"OneIteration: could not update round-off error: %q", err.Error(),
 		)
 	}
+	// fmt.Printf("H after an iteration: %v\n", s.h) // debug
 	return s.HasTerminated()
 }
 
@@ -355,7 +357,7 @@ func (s *State) CheckInvariants() error {
 			}
 		}
 	} else {
-		ab, err := multiplyIntInt(s.aInt64Matrix, s.bInt64Matrix, s.numRows)
+		ab, err := util.MultiplyIntInt(s.aInt64Matrix, s.bInt64Matrix, s.numRows)
 		if err != nil {
 			return fmt.Errorf(
 				"CheckInvariants: could not multiply %v by %v: %q",

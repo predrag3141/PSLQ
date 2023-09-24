@@ -110,6 +110,8 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
   <tr><td>10</td><td>IDASIF</td><td>90</td><td>1.000000</td><td>4.358899</td><td>4.358899</td></tr>
   <tr><td>10</td><td>IDASIF</td><td>92</td><td>1.000000</td><td>4.358899</td><td>4.358899</td></tr>
   <tr><td>10</td><td>IDASIF</td><td>95</td><td>1.000000</td><td>4.358899</td><td>4.358899</td></tr>
+  <tr><td>10</td><td>Classic</td><td>60</td><td>3.074540</td><td>4.358899</td><td>4.358899</td></tr>
+  <tr><td>10</td><td>IDASIF</td><td>83</td><td>1.000000</td><td>4.358899</td><td>4.358899</td></tr>
   <tr><td>40</td><td>Classic</td><td>473</td><td>1296.976910</td><td>1297.015035</td><td>8.485281</td></tr>
   <tr><td>40</td><td>IDASIF</td><td>3267</td><td>4.117404</td><td>13.038405</td><td>8.485281</td></tr>
   <tr><td>45</td><td>Classic</td><td>570</td><td>1142.274989</td><td>1142.279300</td><td>9.273618</td></tr>
@@ -124,6 +126,8 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
   <tr><td>55</td><td>IDASIF</td><td>6921</td><td>6.969158</td><td>17.972201</td><td>10.198039</td></tr>
   <tr><td>55</td><td>Classic</td><td>757</td><td>3503.093034</td><td>3503.093062</td><td>10.198039</td></tr>
   <tr><td>55</td><td>IDASIF</td><td>6875</td><td>7.055695</td><td>16.431677</td><td>10.198039</td></tr>
+  <tr><td>55</td><td>Classic</td><td>745</td><td>1626.754306</td><td>1626.761814</td><td>10.198039</td></tr>
+  <tr><td>55</td><td>IDASIF</td><td>6971</td><td>5.948555</td><td>16.248077</td><td>10.198039</td></tr>
   <tr><td>70</td><td>Classic</td><td>1000</td><td>2845.110951</td><td>2845.160101</td><td>11.313708</td></tr>
   <tr><td>70</td><td>IDASIF</td><td>10814</td><td>12.968656</td><td>22.693611</td><td>11.313708</td></tr>
   <tr><td>80</td><td>Classic</td><td>1255</td><td>22622.052275</td><td>22622.076784</td><td>11.958261</td></tr>
@@ -136,6 +140,8 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
   <tr><td>100</td><td>IDASIF</td><td>17805</td><td>37.646748</td><td>37.920970</td><td>13.453624</td></tr>
   <tr><td>100</td><td>Classic</td><td>1735</td><td>44705.980105</td><td>44706.686144</td><td>13.453624</td></tr>
   <tr><td>100</td><td>IDASIF</td><td>19397</td><td>35.389694</td><td>35.651087</td><td>13.453624</td></tr>
+  <tr><td>100</td><td>Classic</td><td>1733</td><td>45292.389840</td><td>45292.405809</td><td>13.453624</td></tr>
+  <tr><td>100</td><td>IDASIF</td><td>20381</td><td>40.390584</td><td>42.142615</td><td>13.453624</td></tr>
 </table>
 </div>
 

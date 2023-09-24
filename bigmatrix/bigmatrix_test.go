@@ -5,8 +5,10 @@ package bigmatrix
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"math/rand"
 	"os"
 	"pslq/bignumber"
+	"pslq/util"
 	"testing"
 )
 
@@ -377,6 +379,688 @@ func TestBigMatrix_Transpose(t *testing.T) {
 		[]int64{1, 3, 5, 7, 2, 4, 6, 8, 4, 9, 16, 25, -1, -2, -3, -4}, 4, 4,
 		[]int64{1, 2, 4, -1, 3, 4, 9, -2, 5, 6, 16, -3, 7, 8, 25, -4}, 4, 4,
 	)
+}
+
+func TestPermuteRowsAndCols(t *testing.T) {
+	// Input data comes from random permutations converted to cycles. This is done
+	// in pslqops, which depends on bigmatrix. This dependency makes it unacceptable to
+	// use psloqops to generate the cycles live, so they were generated outside of any
+	// unit test and copied here.
+	type InputData struct {
+		NumRows int
+		Indices []int
+		Perm    []int
+		Cycles  [][]int
+	}
+	inputData := []InputData{
+		{
+			NumRows: 17,
+			Indices: []int{0, 3, 5, 8, 12, 15},
+			Perm:    []int{3, 2, 5, 4, 0, 1},
+			Cycles:  [][]int{{0, 8, 12}, {3, 5, 15}},
+		},
+		{
+			NumRows: 11,
+			Indices: []int{1, 3, 5, 6, 7},
+			Perm:    []int{4, 0, 3, 1, 2},
+			Cycles:  [][]int{{1, 7, 5, 6, 3}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{0, 2, 4, 11},
+			Perm:    []int{3, 2, 0, 1},
+			Cycles:  [][]int{{0, 11, 2, 4}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{1, 2, 3, 4, 8, 11},
+			Perm:    []int{4, 2, 5, 0, 1, 3},
+			Cycles:  [][]int{{1, 8, 2, 3, 11, 4}},
+		},
+		{
+			NumRows: 15,
+			Indices: []int{0, 1, 4, 7, 10, 14},
+			Perm:    []int{4, 2, 1, 0, 5, 3},
+			Cycles:  [][]int{{0, 10, 14, 7}, {1, 4}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{0, 3, 7, 9},
+			Perm:    []int{1, 2, 0, 3},
+			Cycles:  [][]int{{0, 3, 7}},
+		},
+		{
+			NumRows: 14,
+			Indices: []int{5, 7},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{5, 7}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 9, 10},
+			Perm:    []int{0, 1, 7, 3, 4, 6, 8, 2, 5},
+			Cycles:  [][]int{{2, 9}, {5, 6, 10}},
+		},
+		{
+			NumRows: 17,
+			Indices: []int{1, 5, 11},
+			Perm:    []int{2, 1, 0},
+			Cycles:  [][]int{{1, 11}},
+		},
+		{
+			NumRows: 6,
+			Indices: []int{2, 5},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{2, 5}},
+		},
+		{
+			NumRows: 10,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
+			Perm:    []int{2, 7, 8, 6, 5, 0, 4, 1, 3},
+			Cycles:  [][]int{{0, 2, 8, 3, 6, 4, 5}, {1, 7}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{1, 3, 5, 8},
+			Perm:    []int{3, 0, 1, 2},
+			Cycles:  [][]int{{1, 8, 5, 3}},
+		},
+		{
+			NumRows: 5,
+			Indices: []int{1, 4},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{1, 4}},
+		},
+		{
+			NumRows: 16,
+			Indices: []int{0, 2, 4, 6, 7, 12},
+			Perm:    []int{5, 3, 0, 1, 4, 2},
+			Cycles:  [][]int{{0, 12, 4}, {2, 6}},
+		},
+		{
+			NumRows: 8,
+			Indices: []int{0, 2, 3, 5},
+			Perm:    []int{2, 1, 0, 3},
+			Cycles:  [][]int{{0, 3}},
+		},
+		{
+			NumRows: 16,
+			Indices: []int{0, 1, 3, 4, 6, 8, 9, 10, 15},
+			Perm:    []int{1, 8, 6, 2, 5, 7, 3, 0, 4},
+			Cycles:  [][]int{{0, 1, 15, 6, 8, 10}, {3, 9, 4}},
+		},
+		{
+			NumRows: 14,
+			Indices: []int{0, 2, 4, 6, 13},
+			Perm:    []int{3, 2, 0, 1, 4},
+			Cycles:  [][]int{{0, 6, 2, 4}},
+		},
+		{
+			NumRows: 15,
+			Indices: []int{0, 7, 10},
+			Perm:    []int{0, 2, 1},
+			Cycles:  [][]int{{7, 10}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{1, 3, 4, 8, 13, 18},
+			Perm:    []int{3, 0, 2, 1, 5, 4},
+			Cycles:  [][]int{{1, 8, 3}, {13, 18}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{1, 2, 4, 6, 8},
+			Perm:    []int{1, 0, 3, 2, 4},
+			Cycles:  [][]int{{1, 2}, {4, 6}},
+		},
+		{
+			NumRows: 15,
+			Indices: []int{1, 4, 6, 14},
+			Perm:    []int{2, 3, 0, 1},
+			Cycles:  [][]int{{1, 6}, {4, 14}},
+		},
+		{
+			NumRows: 11,
+			Indices: []int{0, 1, 2, 3, 5, 7, 10},
+			Perm:    []int{2, 4, 6, 3, 0, 5, 1},
+			Cycles:  [][]int{{0, 2, 10, 1, 5}},
+		},
+		{
+			NumRows: 5,
+			Indices: []int{0, 1, 2, 3, 4},
+			Perm:    []int{0, 3, 2, 4, 1},
+			Cycles:  [][]int{{1, 3, 4}},
+		},
+		{
+			NumRows: 5,
+			Indices: []int{0, 1, 3},
+			Perm:    []int{1, 0, 2},
+			Cycles:  [][]int{{0, 1}},
+		},
+		{
+			NumRows: 15,
+			Indices: []int{6, 9},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{6, 9}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 1, 2, 4, 5, 7, 8, 12},
+			Perm:    []int{7, 6, 0, 1, 3, 2, 4, 5},
+			Cycles:  [][]int{{0, 12, 7, 2}, {1, 8, 5, 4}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{0, 3, 10},
+			Perm:    []int{2, 1, 0},
+			Cycles:  [][]int{{0, 10}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{2, 5, 6},
+			Perm:    []int{2, 0, 1},
+			Cycles:  [][]int{{2, 6, 5}},
+		},
+		{
+			NumRows: 10,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
+			Perm:    []int{1, 4, 5, 0, 7, 2, 3, 6, 8},
+			Cycles:  [][]int{{0, 1, 4, 7, 6, 3}, {2, 5}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{1, 4, 5, 6},
+			Perm:    []int{0, 2, 1, 3},
+			Cycles:  [][]int{{4, 5}},
+		},
+		{
+			NumRows: 2,
+			Indices: []int{0, 1},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{0, 1}},
+		},
+		{
+			NumRows: 11,
+			Indices: []int{0, 1, 3, 4, 5},
+			Perm:    []int{4, 2, 0, 1, 3},
+			Cycles:  [][]int{{0, 5, 4, 1, 3}},
+		},
+		{
+			NumRows: 10,
+			Indices: []int{2, 3, 9},
+			Perm:    []int{1, 0, 2},
+			Cycles:  [][]int{{2, 3}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
+			Perm:    []int{3, 0, 5, 2, 4, 7, 6, 8, 1},
+			Cycles:  [][]int{{0, 3, 2, 5, 7, 8, 1}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{0, 2, 4, 5, 8},
+			Perm:    []int{1, 0, 3, 2, 4},
+			Cycles:  [][]int{{0, 2}, {4, 5}},
+		},
+		{
+			NumRows: 18,
+			Indices: []int{1, 7, 12},
+			Perm:    []int{2, 1, 0},
+			Cycles:  [][]int{{1, 12}},
+		},
+		{
+			NumRows: 10,
+			Indices: []int{0, 1, 2, 4, 5, 9},
+			Perm:    []int{0, 5, 4, 3, 2, 1},
+			Cycles:  [][]int{{1, 9}, {2, 5}},
+		},
+		{
+			NumRows: 6,
+			Indices: []int{0, 1, 2, 3, 4},
+			Perm:    []int{4, 3, 1, 0, 2},
+			Cycles:  [][]int{{0, 4, 2, 1, 3}},
+		},
+		{
+			NumRows: 6,
+			Indices: []int{0, 1, 3, 5},
+			Perm:    []int{0, 2, 1, 3},
+			Cycles:  [][]int{{1, 3}},
+		},
+		{
+			NumRows: 16,
+			Indices: []int{0, 1, 3, 5, 6, 8, 11},
+			Perm:    []int{0, 5, 6, 2, 3, 1, 4},
+			Cycles:  [][]int{{1, 8}, {3, 11, 6, 5}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 1, 2, 4, 6, 7, 8, 10},
+			Perm:    []int{5, 2, 0, 6, 1, 7, 4, 3},
+			Cycles:  [][]int{{0, 7, 10, 4, 8, 6, 1, 2}},
+		},
+		{
+			NumRows: 6,
+			Indices: []int{1, 2, 5},
+			Perm:    []int{2, 0, 1},
+			Cycles:  [][]int{{1, 5, 2}},
+		},
+		{
+			NumRows: 18,
+			Indices: []int{1, 3, 4, 5, 7, 8, 10, 12, 13},
+			Perm:    []int{0, 8, 2, 1, 6, 3, 7, 4, 5},
+			Cycles:  [][]int{{3, 13, 8, 5}, {7, 10, 12}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7, 12},
+			Perm:    []int{0, 7, 1, 3, 5, 8, 6, 2, 4},
+			Cycles:  [][]int{{1, 7, 2}, {4, 5, 12}},
+		},
+		{
+			NumRows: 8,
+			Indices: []int{1, 3, 7},
+			Perm:    []int{1, 0, 2},
+			Cycles:  [][]int{{1, 3}},
+		},
+		{
+			NumRows: 5,
+			Indices: []int{1, 3},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{1, 3}},
+		},
+		{
+			NumRows: 14,
+			Indices: []int{0, 1, 2, 3, 4, 5, 7, 8, 10},
+			Perm:    []int{2, 0, 4, 7, 6, 1, 8, 5, 3},
+			Cycles:  [][]int{{0, 2, 4, 7, 10, 3, 8, 5, 1}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{1, 6, 10, 13},
+			Perm:    []int{2, 3, 1, 0},
+			Cycles:  [][]int{{1, 10, 6, 13}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{8, 12},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{8, 12}},
+		},
+		{
+			NumRows: 18,
+			Indices: []int{1, 5, 9, 15},
+			Perm:    []int{1, 3, 2, 0},
+			Cycles:  [][]int{{1, 5, 15}},
+		},
+		{
+			NumRows: 7,
+			Indices: []int{1, 3, 6},
+			Perm:    []int{1, 0, 2},
+			Cycles:  [][]int{{1, 3}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{0, 2, 3, 5, 7, 8, 11, 13, 15},
+			Perm:    []int{0, 8, 4, 1, 5, 7, 6, 2, 3},
+			Cycles:  [][]int{{2, 15, 5}, {3, 7, 8, 13}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{1, 2, 4, 5, 8},
+			Perm:    []int{4, 2, 1, 0, 3},
+			Cycles:  [][]int{{1, 8, 5}, {2, 4}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{2, 6, 7},
+			Perm:    []int{1, 0, 2},
+			Cycles:  [][]int{{2, 6}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{1, 2, 4, 6, 8, 11},
+			Perm:    []int{3, 5, 0, 1, 4, 2},
+			Cycles:  [][]int{{1, 6, 2, 11, 4}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 2, 4, 6, 8, 11},
+			Perm:    []int{0, 2, 5, 4, 1, 3},
+			Cycles:  [][]int{{2, 4, 11, 6, 8}},
+		},
+		{
+			NumRows: 18,
+			Indices: []int{2, 6, 9, 12},
+			Perm:    []int{3, 1, 0, 2},
+			Cycles:  [][]int{{2, 12, 9}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{3, 8},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{3, 8}},
+		},
+		{
+			NumRows: 8,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7},
+			Perm:    []int{4, 3, 6, 5, 0, 7, 1, 2},
+			Cycles:  [][]int{{0, 4}, {1, 3, 5, 7, 2, 6}},
+		},
+		{
+			NumRows: 7,
+			Indices: []int{1, 3, 5},
+			Perm:    []int{1, 2, 0},
+			Cycles:  [][]int{{1, 3, 5}},
+		},
+		{
+			NumRows: 3,
+			Indices: []int{0, 2},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{0, 2}},
+		},
+		{
+			NumRows: 12,
+			Indices: []int{0, 1, 2, 3, 4, 5, 7, 9, 11},
+			Perm:    []int{3, 1, 4, 8, 6, 5, 2, 0, 7},
+			Cycles:  [][]int{{0, 3, 11, 9}, {2, 4, 7}},
+		},
+		{
+			NumRows: 15,
+			Indices: []int{3, 8, 12},
+			Perm:    []int{1, 0, 2},
+			Cycles:  [][]int{{3, 8}},
+		},
+		{
+			NumRows: 7,
+			Indices: []int{1, 2, 3},
+			Perm:    []int{1, 2, 0},
+			Cycles:  [][]int{{1, 2, 3}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{0, 2, 3, 4, 6, 9},
+			Perm:    []int{4, 0, 1, 3, 2, 5},
+			Cycles:  [][]int{{0, 6, 3, 2}},
+		},
+		{
+			NumRows: 2,
+			Indices: []int{0, 1},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{0, 1}},
+		},
+		{
+			NumRows: 4,
+			Indices: []int{0, 2},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{0, 2}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{1, 3, 4, 7},
+			Perm:    []int{2, 0, 3, 1},
+			Cycles:  [][]int{{1, 4, 7, 3}},
+		},
+		{
+			NumRows: 11,
+			Indices: []int{1, 4, 5},
+			Perm:    []int{1, 2, 0},
+			Cycles:  [][]int{{1, 4, 5}},
+		},
+		{
+			NumRows: 6,
+			Indices: []int{2, 4},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{2, 4}},
+		},
+		{
+			NumRows: 7,
+			Indices: []int{0, 1, 2, 3, 4},
+			Perm:    []int{3, 2, 1, 4, 0},
+			Cycles:  [][]int{{0, 3, 4}, {1, 2}},
+		},
+		{
+			NumRows: 15,
+			Indices: []int{2, 4, 5, 6},
+			Perm:    []int{2, 1, 0, 3},
+			Cycles:  [][]int{{2, 5}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{1, 3, 5, 8, 13, 16},
+			Perm:    []int{1, 4, 3, 2, 0, 5},
+			Cycles:  [][]int{{1, 3, 13}, {5, 8}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 2, 4, 6, 8},
+			Perm:    []int{1, 3, 4, 0, 2},
+			Cycles:  [][]int{{0, 2, 6}, {4, 8}},
+		},
+		{
+			NumRows: 16,
+			Indices: []int{1, 3, 5, 7, 8, 11, 13},
+			Perm:    []int{3, 4, 2, 0, 1, 5, 6},
+			Cycles:  [][]int{{1, 7}, {3, 8}},
+		},
+		{
+			NumRows: 11,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 8, 9},
+			Perm:    []int{7, 6, 5, 1, 3, 4, 8, 2, 0},
+			Cycles:  [][]int{{0, 8, 2, 5, 4, 3, 1, 6, 9}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{1, 3, 4, 6, 8, 11, 14, 16},
+			Perm:    []int{3, 5, 7, 6, 0, 2, 1, 4},
+			Cycles:  [][]int{{1, 6, 14, 3, 11, 4, 16, 8}},
+		},
+		{
+			NumRows: 11,
+			Indices: []int{0, 3, 6},
+			Perm:    []int{1, 2, 0},
+			Cycles:  [][]int{{0, 3, 6}},
+		},
+		{
+			NumRows: 16,
+			Indices: []int{4, 7},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{4, 7}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
+			Perm:    []int{1, 0, 4, 6, 7, 3, 5, 2, 8},
+			Cycles:  [][]int{{0, 1}, {2, 4, 7}, {3, 6, 5}},
+		},
+		{
+			NumRows: 10,
+			Indices: []int{1, 2, 5, 9},
+			Perm:    []int{1, 3, 0, 2},
+			Cycles:  [][]int{{1, 2, 9, 5}},
+		},
+		{
+			NumRows: 7,
+			Indices: []int{1, 5},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{1, 5}},
+		},
+		{
+			NumRows: 16,
+			Indices: []int{2, 4, 7, 14},
+			Perm:    []int{1, 3, 0, 2},
+			Cycles:  [][]int{{2, 4, 14, 7}},
+		},
+		{
+			NumRows: 7,
+			Indices: []int{0, 6},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{0, 6}},
+		},
+		{
+			NumRows: 14,
+			Indices: []int{0, 1, 2, 3, 4, 6, 7, 9, 12},
+			Perm:    []int{7, 6, 1, 8, 2, 4, 5, 0, 3},
+			Cycles:  [][]int{{0, 9}, {1, 7, 6, 4, 2}, {3, 12}},
+		},
+		{
+			NumRows: 4,
+			Indices: []int{0, 1, 2, 3},
+			Perm:    []int{1, 3, 2, 0},
+			Cycles:  [][]int{{0, 1, 3}},
+		},
+		{
+			NumRows: 14,
+			Indices: []int{1, 3, 9},
+			Perm:    []int{0, 2, 1},
+			Cycles:  [][]int{{3, 9}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{0, 3, 4, 5, 11, 17},
+			Perm:    []int{5, 4, 0, 1, 3, 2},
+			Cycles:  [][]int{{0, 17, 4}, {3, 11, 5}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{0, 1, 3, 4, 7},
+			Perm:    []int{2, 1, 0, 3, 4},
+			Cycles:  [][]int{{0, 3}},
+		},
+		{
+			NumRows: 4,
+			Indices: []int{0, 1, 2, 3},
+			Perm:    []int{1, 0, 3, 2},
+			Cycles:  [][]int{{0, 1}, {2, 3}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 1, 2, 3, 4, 5, 7, 8, 12},
+			Perm:    []int{6, 1, 8, 4, 5, 0, 3, 7, 2},
+			Cycles:  [][]int{{0, 7, 3, 4, 5}, {2, 12}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7},
+			Perm:    []int{6, 2, 1, 3, 5, 0, 7, 4},
+			Cycles:  [][]int{{0, 6, 7, 4, 5}, {1, 2}},
+		},
+		{
+			NumRows: 17,
+			Indices: []int{0, 2, 4, 7, 8, 12, 14},
+			Perm:    []int{3, 5, 6, 0, 4, 1, 2},
+			Cycles:  [][]int{{0, 7}, {2, 12}, {4, 14}},
+		},
+		{
+			NumRows: 6,
+			Indices: []int{1, 5},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{1, 5}},
+		},
+		{
+			NumRows: 19,
+			Indices: []int{1, 3, 5, 7, 9, 11, 12, 14},
+			Perm:    []int{4, 3, 1, 7, 2, 6, 5, 0},
+			Cycles:  [][]int{{1, 9, 5, 3, 7, 14}, {11, 12}},
+		},
+		{
+			NumRows: 6,
+			Indices: []int{0, 1, 2, 5},
+			Perm:    []int{3, 2, 0, 1},
+			Cycles:  [][]int{{0, 5, 1, 2}},
+		},
+		{
+			NumRows: 13,
+			Indices: []int{0, 2},
+			Perm:    []int{1, 0},
+			Cycles:  [][]int{{0, 2}},
+		},
+		{
+			NumRows: 15,
+			Indices: []int{0, 1, 2, 4, 5, 6, 7, 8, 9},
+			Perm:    []int{3, 1, 7, 5, 2, 4, 8, 0, 6},
+			Cycles:  [][]int{{0, 4, 6, 5, 2, 8}, {7, 9}},
+		},
+		{
+			NumRows: 17,
+			Indices: []int{1, 2, 9, 15},
+			Perm:    []int{1, 0, 3, 2},
+			Cycles:  [][]int{{1, 2}, {9, 15}},
+		},
+		{
+			NumRows: 9,
+			Indices: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
+			Perm:    []int{3, 1, 0, 5, 2, 6, 8, 7, 4},
+			Cycles:  [][]int{{0, 3, 5, 6, 8, 4, 2}},
+		},
+	}
+
+	const maxNumIndices = 10 // inputData below has no more than this many indices per InputData instance
+	const maxMatrixEntry = 100
+
+	numIndicesCounts := make([]int, maxNumIndices)
+	numCyclesCounts := make([]int, maxNumIndices)
+	for testNbr := 0; testNbr < len(inputData); testNbr++ {
+		// Need inputs for bigMatrix.PermuteRows and bigMatrix.PermuteColumns, which
+		// double as actual values once they are permuted in-place.
+		var err error
+		var actualPermutedRowsBigNumber, actualPermutedColsBigNumber *BigMatrix
+		numRows := inputData[testNbr].NumRows
+		actualPermutedRowsInt64 := make([]int64, numRows*numRows)
+		actualPermutedColsInt64 := make([]int64, numRows*numRows)
+		for i := 0; i < numRows; i++ {
+			for j := 0; j < numRows; j++ {
+				actualPermutedRowsInt64[i*numRows+j] = int64(rand.Intn(maxMatrixEntry) - (maxMatrixEntry / 2))
+				actualPermutedColsInt64[i*numRows+j] = int64(rand.Intn(maxMatrixEntry) - (maxMatrixEntry / 2))
+			}
+		}
+		actualPermutedRowsBigNumber, err = NewFromInt64Array(actualPermutedRowsInt64, numRows, numRows)
+		actualPermutedColsBigNumber, err = NewFromInt64Array(actualPermutedColsInt64, numRows, numRows)
+		assert.NoError(t, err)
+
+		// Need expected values
+		var expectedPermutedRowsInt64, expectedPermutedColsInt64, rowPermutationMatrix, colPermutationMatrix []int64
+		var expectedPermutedRowsBigNumber, expectedPermutedColsBigNumber *BigMatrix
+		indices := inputData[testNbr].Indices
+		perm := inputData[testNbr].Perm
+		numIndices := len(indices)
+		numIndicesCounts[numIndices]++
+		rowPermutationMatrix, colPermutationMatrix, err = util.GetPermutationMatrices(indices, perm, numRows)
+		assert.NoError(t, err)
+		expectedPermutedRowsInt64, err = util.MultiplyIntInt(rowPermutationMatrix, actualPermutedRowsInt64, numRows)
+		assert.NoError(t, err)
+		expectedPermutedColsInt64, err = util.MultiplyIntInt(actualPermutedColsInt64, colPermutationMatrix, numRows)
+		assert.NoError(t, err)
+		expectedPermutedRowsBigNumber, err = NewFromInt64Array(expectedPermutedRowsInt64, numRows, numRows)
+		expectedPermutedColsBigNumber, err = NewFromInt64Array(expectedPermutedColsInt64, numRows, numRows)
+
+		// Need actual values
+		err = actualPermutedRowsBigNumber.PermuteRows(inputData[testNbr].Cycles)
+		assert.NoError(t, err)
+		err = actualPermutedColsBigNumber.PermuteColumns(inputData[testNbr].Cycles)
+		assert.NoError(t, err)
+		numCyclesCounts[len(inputData[testNbr].Cycles)]++
+
+		// Need to compare expected to actual values
+		zero := bignumber.NewFromInt64(0)
+		var equals bool
+		equals, err = expectedPermutedRowsBigNumber.Equals(actualPermutedRowsBigNumber, zero)
+		assert.NoError(t, err)
+		assert.True(t, equals)
+		equals, err = expectedPermutedColsBigNumber.Equals(actualPermutedColsBigNumber, zero)
+		assert.NoError(t, err)
+		assert.True(t, equals)
+	}
+	fmt.Printf("(n, number of times numIndices was n): ")
+	for n := 0; n < maxNumIndices; n++ {
+		fmt.Printf("(%d, %d) ", n, numIndicesCounts[n])
+	}
+	fmt.Printf("\n")
+	fmt.Printf("(n, number of times there were n cycles in a permutation): ")
+	for n := 0; n < maxNumIndices; n++ {
+		fmt.Printf("(%d, %d) ", n, numCyclesCounts[n])
+	}
+	fmt.Printf("\n")
 }
 
 func testBinaryOp(
