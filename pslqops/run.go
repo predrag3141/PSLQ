@@ -192,6 +192,11 @@ func (s *State) OneIteration(
 	// Step 2 of this PSLQ iteration
 	var rowOperation *RowOperation
 	rowOperation, err = getR(s.h, s.powersOfGamma)
+	err = rowOperation.ValidateAll(s.numRows, s.numCols, "PerformRowOp")
+	if err != nil {
+		return false, err
+	}
+
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not get R: %q", err.Error())
 	}

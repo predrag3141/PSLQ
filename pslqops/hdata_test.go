@@ -81,7 +81,7 @@ func TestNewFromPermutation(t *testing.T) {
 	const seedIncr = 2343
 	const numTests = 100
 	const maxNumIndices = 15
-	const maxNumCols = 100
+	const maxNumRows = 100
 
 	counts := make([]int, maxNumIndices)
 	for testNbr := 0; testNbr < numTests; testNbr++ {
@@ -89,7 +89,7 @@ func TestNewFromPermutation(t *testing.T) {
 		rand.Seed(int64(minSeed + testNbr*seedIncr))
 		numIndices := 2 + rand.Intn(maxNumIndices-2)
 		counts[numIndices]++
-		numCols := numIndices + rand.Intn(maxNumCols-numIndices)
+		numCols := numIndices + rand.Intn(maxNumRows-numIndices)
 		perm := util.GetPermutation(numIndices)
 		indices := util.GetIndices(numIndices, numCols)
 

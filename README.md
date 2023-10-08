@@ -68,6 +68,33 @@ As shown in the section "A Sharper Lower Bound on the Smallest Solution While PS
 
 Of greatest importance is the last diagonal element, _H<sub>n-1,n-1</sub>_. Lemma 10 in a [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf) states that the norm of the solution is the value of _1/|H<sub>n-1,n-1</sub>_| at the iteration of PSLQ before _H<sub>n-1,n-1</sub>_ becomes _0_. So it would improve accuracy to keep |_H<sub>n-1,n-1</sub>_| as large as possible while PSLQ is running.
 
+
+### A Deep Dive into Lemma 10
+
+Lemma 10 is crucial to the strategies employed in this repository, so we need to delve into some of the details of its proof. This section is a guide to that proof, not a full proof. It makes the proof more readable, and reveals the assumptions behind the lemma. That way, we can be assured that adding row operations to the toolkit used in classical PSLQ does not violate the assumptions.
+
+Lemma 10 relies on the assumptions listed below, which are not broken by any row operation with determinant 1 or -1 ("unit determinant"), or any rotation to remove zeroes above the diagonal of H. These assumptions refer to
+
+- A matrix P<sub>x</sub>, defined in the statement of lemma 2
+- _m_, the solution the PSLQ algorithm is about to output, when rows _n-1_ and _n_ are swapped.
+- _A_, the matrix with integer entries and unit determinant that is the product of all previous row operations.
+- _B=A<sup>-1</sup>_, following the notation used here, though in the proof of lemma 10 "_A<sup>-1</sup>_" is the notation for this matrix.
+
+The assumptions are:
+
+- _AP<sub>x</sub>_ = _TDQ<sup>t</sup>H<sub>x</sub><sup>t</sup>_ is a decomposition of AP<sub>x</sub> into into the product of a lower trapezoidal matrix _T_ with diagonal _1s_, an invertible diagonal matrix _D_ with the same diagonal as _H_, and an _n−1×n_ matrix _Q<sup>t</sup>H<sub>x</sub><sup>t</sup>_ with orthonormal rows. This, by the way, is copied from the proof of theorem 1, not lemma 10. But the proof of lemma 10 is trying to say this and doesn't quite accomplish the task.
+- At the point where a zero appears in _H<sub>n,n-1</sub>_, the the _(n−1)_-st column of _B_ is _m_.
+
+Based on the second assumption,
+
+_Am<sup>t</sup>_ =_<B<sup>-1</sup>,_ column _n-1_ of _B>_ = _e<sub>n−1</sub>_, the _(n−1)_-st standard basis vector
+
+(true for any _B<sup>-1</sup>_ and _B_), which is stated in the proof of lemma 10 without connecting this statement to the second assumption. So _Am<sup>t</sup>=e<sub>n-1</sup>_ is not a separate assumption.
+
+With all of the above, lemma 10 is more readable and its assumptions are clear. The first assumption depends only on the initial setup of PSLQ and the fact that _A_ has integer entries and unit determiannt; so no row operation with unit determinant falsifies it.
+
+The second assumption relies only on the fact that _(xBH)<sub>n-1</sub>_ = 0. We know this is a valid assumption because lemma 10 applies when _H<sub>n,n-1</sub>_ is the lone non-zero element of column _n-1_ of _H_. This means that _(xB)<sub>n-1</sub>=0_, i.e. column _n-1_ of _B_ is a solution _m_ of _<x,m>=0_.
+
 ## Improvements of PSLQ Based on the Diagonal of H
 
 Each iteration of PSLQ performs a pair of row operations on _H_ -- one to tame the diagonal of _H_, another to reduce the entries below the diagonal. In this section, "row operation" refers to the former, designed to tame the diagonal of _H_. Any row operation with determinant 1 or -1 is acceptable. But the original 1992 PSLQ paper and the 1999 analysis of PSLQ consider only swaps of adjacent rows.
@@ -144,6 +171,30 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
   <tr><td>100</td><td>IDASIF</td><td>20381</td><td>40.390584</td><td>42.142615</td><td>13.453624</td></tr>
 </table>
 </div>
+
+### A Coming Improvement
+
+Work is underway to implement one particular improvement not yet in the code. The idea is to reach the point where _H<sub>n,n-1</sub>_ is zero, then use that fact to reduce _H<sub>n-2,n-2</sub>_, _H<sub>n-3,n-3</sub>_ and -- if possible -- _H<sub>n-4,n-4</sub>_, etc. The reason this makes progress is that it isolates _H<sub>n-1,n-1</sub>_ as an increasingly large diagonal element, compared to the others that are being reduced. Remember, a corollary of lemma 10 in the [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf) is that the solution is optimal when _H<sub>n-1,n-1</sub>_ is the largest diagonal element.
+
+The condition that makes the reductions of _H<sub>n-2,n-2</sub>_, _H<sub>n-3,n-3</sub>_ ... possible is that there are only zeroes to the right of these entries and their counterparts in row _n_ of the same column. The zero in _H<sub>n,n-1</sub>_ does this for _H<n,n-2>_. The zero in _(xB)<sub>n-1</sub>_ assures that row operations can put a zero in _H<sub>n,n-2</sub>_ while reducing _H<sub>n-2,n-2</sub>_, provided _x_ contains only integers (more on this below). There is no guarantee that reducing _H<sub>n-3,n-3</sub>_ can put a zero in _H<sub>n,n-3</sub>_, but if we can the reduction is possible in column _n-4_, etc.
+
+Let's pause here to note what happens to _H_ in large dimensions, like 50 and above. In spite of the best efforts to swap large diagonal elements towards the bottom right, the largest diagonal elements end up in the upper left. Even small numbers in the sub-diagonal, one below the main diagonal -- typically a hundredth to a tenth the size of the diagonal elements -- prevent swaps of larger diagonal elements from left to right. Diagonal improvement via standard row swaps comes to a halt.
+
+All this changes, once small numbers appear in the diagonal close to the right-hand side of _H_. Row swaps are unstuck, as they can readily move these small diagonal elements to the upper left. After that is done, new large diagonal elements appear in _H<sub>n-2,n-2</sub>_, _H<sub>n-3,n-3</sub>_ ... and the cycle of diagonal reduction and standard row-swaps repeats.
+
+As promised, here is an explanation of why a zero appears in _H<n,n-2>_ when reducing _H<sub>n-2,n-2</sub>_, provided that _x_ contains only integers. The fact that
+
+0 = _<((xB)<sub>n-2</sub>, (xB)<sub>n-1</sub>, (xB)<sub>n</sub>), (H<sub>n-2,n-2</sub>, H<sub>n-1,n-2</sub>, H<sub>n,n-2</sub>)>_
+
+&nbsp;&nbsp;&nbsp;&nbsp;=_<((xB)<sub>n-2</sub>, 0, (xB)<sub>n</sub>), (H<sub>n-2,n-2</sub>, H<sub>n-1,n-2</sub>, H<sub>n,n-2</sub>)>_
+
+&nbsp;&nbsp;&nbsp;&nbsp;=_<((xB)<sub>n-2</sub>, (xB)<sub>n</sub>), (H<sub>n-2,n-2</sub>, H<sub>n,n-2</sub>):_
+
+is an integer relation between _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_ guarantees that reducing _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_ puts a zero in _H<sub>n,n-2</sub>_ (or _H<sub>n-2,n-2</sub>_) on the last of finitely many steps of the kind in Euclid's algorithm or continued fractions. If the zero appears in _H<sub>n-2,n-2</sub>_, you would just swap rows _n-2_ and _n_ to put the zero in _H<sub>n,n-2</sub>_.
+
+An important detail in how classic PSLQ works is needed to support the reduction of diagonal elements near the bottom right of _H_: The Hermite reduction should leave row _n_ alone. Only row swaps involving the last few rows should affect row _n_, unless its entries grow especially large. Occasional Hermite reductions should be OK, but not enough to zero out entries near the right-hand side of the row.
+
+It remains to be seen how many times the reduction of diagonal elements in the bottom-right of _H_ is allowed to proceed when the dimension is high; how stark the size of the current solution in column _n-1_ of _B_ becomes; and whether a rival to its size shows up in column _n-2_. But the hope is that the answers to those questions are "many, many times"; "very stark" and "very often". If so, PSLQ as an efficient solution to the shortest vector problem should break into dimension 50 and above, which is new territory for efficient algorithms.
 
 # The PSLQ Implementation in This Repository
 

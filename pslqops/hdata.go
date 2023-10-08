@@ -243,24 +243,12 @@ func (ro *RowOperation) ValidateIndices(numRows, numCols int, caller string) err
 			return fmt.Errorf("%s: ro.Indices %v is not stricty increasing", caller, ro.Indices)
 		}
 	}
-	if (numCols == ro.Indices[numIndices-1]) && (ro.Indices[0] != numCols-1) {
-		// It is OK if the last index is numCols, a.k.a. numRows-1, but only when swapping
-		// the last two rows. But swapping the last two rows would have required
-		// indices[0] == numCols - 1. No check that numIndices == 2 was needed, since this
-		// function also verifies that the elements of indices are strictly increasing;
-		// which means that ensuring that indices[0] == numCols - 1 also ensures that
-		// numIndices == 2.
-		return fmt.Errorf(
-			"%s: %d <= %d = ro.Indices[%d]", caller, numCols, ro.Indices[numIndices-1], numIndices-1,
-		)
-	}
 	return nil
 }
 
-// ValidateAll performs a quick validation on a RowOperation instance. Whether the
-// OperationOnH and OperationOnB are inverses is not checked (it's too slow). Also,
-// PermutationOfH and PermutationOfB are not validated, as they should be set by the
-// trusted constructor, NewFromPermutation.
+// ValidateAll performs a quick validation on a RowOperation instance.  PermutationOfH
+// and PermutationOfB are not validated, as they should be set by the trusted constructor,
+// NewFromPermutation.
 //
 // numRows and numCols refer to the dimensions of H.
 func (ro *RowOperation) ValidateAll(numRows, numCols int, caller string) error {

@@ -287,7 +287,7 @@ func TestUpdateInt64A(t *testing.T) {
 		aMatrix := make([]int64, numRows*numRows)
 		numIndices := 2 + rand.Intn(numCols-1)
 		assert.Less(t, numIndices, len(counts))
-		indices := util.GetIndices(numIndices, numCols, true)
+		indices := util.GetIndices(numIndices, numRows)
 		if indices[0] == numCols-1 {
 			counts[1]++
 		}
@@ -357,7 +357,7 @@ func TestUpdateBigNumberA(t *testing.T) {
 		aEntries := make([]int64, numRows*numRows)
 		numIndices := 2 + rand.Intn(numCols-1)
 		assert.Less(t, numIndices, len(counts))
-		indices := util.GetIndices(numIndices, numCols, true)
+		indices := util.GetIndices(numIndices, numRows)
 		if indices[0] == numCols-1 {
 			counts[1]++
 		}
@@ -437,7 +437,7 @@ func TestUpdateInt64B(t *testing.T) {
 		eMatrix := make([]int64, numRows*numRows)
 		numIndices := 2 + rand.Intn(numCols-1)
 		assert.Less(t, numIndices, len(counts))
-		indices := util.GetIndices(numIndices, numCols, true)
+		indices := util.GetIndices(numIndices, numRows)
 		if indices[0] == numCols-1 {
 			counts[1]++
 		}
@@ -510,7 +510,7 @@ func TestUpdateBigNumberB(t *testing.T) {
 		eEntries := make([]int64, numRows*numRows)
 		numIndices := 2 + rand.Intn(numCols-1)
 		assert.Less(t, numIndices, len(counts))
-		indices := util.GetIndices(numIndices, numCols, true)
+		indices := util.GetIndices(numIndices, numRows)
 		if indices[0] == numCols-1 {
 			counts[1]++
 		}
@@ -592,7 +592,7 @@ func TestUpdateXBigNumber_Int64(t *testing.T) {
 		eEntries := make([]int64, numColsInX*numColsInX)
 		numIndices := 2 + rand.Intn(numColsInX-2)
 		assert.Less(t, numIndices, len(counts))
-		indices := util.GetIndices(numIndices, numColsInX-1, true)
+		indices := util.GetIndices(numIndices, numColsInX)
 		if indices[0] == numColsInX-2 {
 			counts[1]++
 		}

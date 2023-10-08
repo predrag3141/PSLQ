@@ -135,25 +135,13 @@ func GetPermutation(size int) []int {
 	return permutation
 }
 
-// GetIndices returns a pseudo-random subset of size numIndices of {0,...,numCols-1}.
-// numIndices should be in {2,...,numCols}. The optional flag, allowSwapOfLastTwoRows,
-// gives a 1-in-3 chance of the returned indices being the last two rows, provided
-// numIndices == 2. If not provided, allowSwapOfLastTwoRows defaults to false.
-func GetIndices(numIndices, numCols int, allowSwapOfLastTwoRows ...bool) []int {
-	if numIndices == 2 {
-		if len(allowSwapOfLastTwoRows) > 0 {
-			if allowSwapOfLastTwoRows[0] {
-				if rand.Intn(3) == 1 {
-					// With a 1-in-3 chance, the last two rows were selected
-					return []int{numCols - 1, numCols}
-				}
-			}
-		}
-	}
+// GetIndices returns a pseudo-random subset of size numIndices of {0,...,numItems-1}.
+// numIndices should be in {2,...,numItems}.
+func GetIndices(numIndices, numItems int) []int {
 	retVal := make([]int, numIndices)
 	lastChoice := -1
 	for i := 0; i < numIndices; i++ {
-		numChoices := (numCols - (lastChoice + 1)) / (numIndices - i)
+		numChoices := (numItems - (lastChoice + 1)) / (numIndices - i)
 		if numChoices == 1 {
 			retVal[i] = lastChoice + 1
 		} else {

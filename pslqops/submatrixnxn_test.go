@@ -67,11 +67,12 @@ func TestPerformRowOp(t *testing.T) {
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 100
-	const numTests = 10
+	const numTests = 100
 	const minSeed = 71554
 	const seedIncrement = 1000
 
 	tolerance := bignumber.NewPowerOfTwo(-bitPrecision)
+	counts := make([]int, numRows)
 	for testNbr := 0; testNbr < numTests; testNbr++ {
 		rand.Seed(int64(minSeed + testNbr*seedIncrement))
 		hEntries := make([]int64, numRows*numCols)
@@ -86,8 +87,9 @@ func TestPerformRowOp(t *testing.T) {
 			var fullMatrix *bigmatrix.BigMatrix
 			var err error
 			var rowOperation *RowOperation
-			numIndices := 2 + rand.Intn(numCols-2)
-			indices := util.GetIndices(numIndices, numCols)
+			numIndices := 2 + rand.Intn(numRows-2)
+			indices := util.GetIndices(numIndices, numRows)
+			counts[len(indices)]++
 			switch rowOpType {
 			case rowPermutation:
 				perm := util.GetPermutation(numIndices)
@@ -128,6 +130,11 @@ func TestPerformRowOp(t *testing.T) {
 			assert.True(t, equals)
 		}
 	}
+	fmt.Printf("(n, number of times numIndices was n): ")
+	for n := 0; n < numRows; n++ {
+		fmt.Printf("(%d, %d) ", n, counts[n])
+	}
+	fmt.Printf("\n")
 }
 
 func TestRemoveCorner(t *testing.T) {
