@@ -192,7 +192,10 @@ As promised, here is an explanation of why a zero appears in _H<sub>n,n-2</sub>_
 
 is an integer relation between _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_ is the key. This guarantees that reducing _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_ puts a zero in _H<sub>n,n-2</sub>_ (or _H<sub>n-2,n-2</sub>_) on the last of finitely many steps. These row operations perform the same reduction of _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_ that continued fractions does on a rational ratio of a possibly irrational numerator and denominator: a zero appears in finitely many steps. If the zero appears in _H<sub>n-2,n-2</sub>_, you would just swap rows _n-2_ and _n_ to put the zero in _H<sub>n,n-2</sub>_.
 
-An important detail in how classic PSLQ works is needed to support the reduction of diagonal elements near the bottom right of _H_: The Hermite reduction should leave row _n_ alone. Only row swaps involving the last few rows should affect row _n_, unless its entries grow especially large. Occasional Hermite reductions should be OK, but not enough to zero out entries near the right-hand side of the row.
+Two important details are:
+
+- Classic PSLQ reduces row _n_ during Hermite reduction. This needs to happen only if row _n_ grows large, not every iteration of the PSLQ algorithm. That way, there should be non-zero entries in row _n_ with which to reduce diagonal elements near the right of _H_.
+- When the reduced diagonal elements near the right of _H_ are swapped towards the upper left, new non-zero values appear in row _n_ of _H_, making this reduction possible once again. This happens during the removal of corners created by row swaps.
 
 It remains to be seen how many times the reduction of diagonal elements in the bottom-right of _H_ is allowed to proceed when the dimension is high; how stark the size of the current solution in column _n-1_ of _B_ becomes; and whether a rival to its size shows up in column _n-2_. But the hope is that the answers to those questions are "many, many times"; "very stark" and "very often". If so, PSLQ as an efficient solution to the shortest vector problem should break into dimension 50 and above, which is new territory for efficient algorithms.
 
