@@ -198,7 +198,7 @@ As promised, here is an explanation of why a zero appears in _H<sub>n,n-2</sub>_
 
 is an integer relation between _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_. This guarantees that _H<sub>n-2,n-2</sub> / H<sub>n,n-2</sub>_ is rational. The row operations that mirror the continued fraction approximation of this ratio put an error of zero in _H<sub>n,n-2</sub>_ (or _H<sub>n-2,n-2</sub>_) on the last of finitely many steps. If the zero appears in _H<sub>n-2,n-2</sub>_, you would just swap rows _n-2_ and _n_ to put the zero in _H<sub>n,n-2</sub>_.
 
-Three important details are:
+Two important details are:
 
 - Classic PSLQ reduces row _n_ during Hermite reduction. To keep _H<sub>n,n-2</sub>_ and _H<sub>n,n-3</sub>_ non-zero -- which puts new diagonal elements where they might profitably swap with _H<sub>n-1,n-1</sub>_ -- Hermite reduction should end short of row _n_. How far short of row _n_, under what conditions, is a parameter to adjust. Since swaps of rows near the bottom of _H_ mingle row _n_ with every other row, it may sometimes be necessary to stop Hermite reduction well short of the bottom of _H_ to keep zeroes out of row _n_ near _H<sub>n,n-1</sub>_.
 - When the reduced diagonal elements near the right of _H_ are swapped towards the upper left, new non-zero values appear in row _n_ of _H_, making this reduction possible once again. This happens during the removal of corners created by row swaps.
