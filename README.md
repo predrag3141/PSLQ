@@ -174,9 +174,13 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
 
 ### A Coming Improvement
 
-Work is underway to implement one particular improvement not yet in the code. The idea is to reach the point where _H<sub>n,n-1</sub>_ is zero (as usual), then use that fact to reduce _H<sub>n-2,n-2</sub>_, _H<sub>n-3,n-3</sub>_ and -- if possible -- _H<sub>n-4,n-4</sub>_, etc. The reason this makes progress is that it isolates _H<sub>n-1,n-1</sub>_ as an increasingly large diagonal element, compared to the others, which are being reduced. Remember, a corollary of lemma 10 in the [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf) is that the solution is optimal when _H<sub>n-1,n-1</sub>_ is the largest diagonal element.
+#### Basic Idea
 
-The technique for reducing _H<sub>n-p,n-p</sub>_ involves a continued fraction approximation of _H<sub>n-p,n-p</sub>_ / _H<sub>n,n-p</sub>_ for _p=2,3,..._. It replaces _H<sub>n-p,n-p</sub>_ and _H<sub>n,n-p</sub>_ with errors from successive iterations of this approximation.  For example, if _H<sub>n-p,n-p</sub>=.5_ and _H<sub>n,n-p</sub>=.3_, a row operation would replace _H<sub>n-p,n-p</sub>_ by _.5-.3=.2_; and a second one would replace _H<sub>n,n-p</sub>_ with _.3-.2=.1_, etc. If these row operations terminate with a zero in _H<sub>n-p,n-p</sub>_, a row swap puts that zero in _H<sub>n,n-p</sub>_ and keeps _H<sub>n-p,n-p</sub>_ non-zero.
+Work is underway to implement one particular improvement not yet in the code. The idea is to reach the point where _H<sub>n,n-1</sub>_ is zero (as usual), then use that fact to reduce |_H<sub>n-2,n-2</sub>_|, |_H<sub>n-3,n-3</sub>_| and -- if possible -- |_H<sub>n-4,n-4</sub>_|, etc. The reason this makes progress is that it isolates _H<sub>n-1,n-1</sub>_ as an increasingly large diagonal element, compared to the others, which are being reduced. Remember, a corollary of lemma 10 in the [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf) is that the solution is optimal when _H<sub>n-1,n-1</sub>_ is the largest diagonal element.
+
+The technique for reducing |_H<sub>n-p,n-p</sub>_| involves a continued fraction approximation of _H<sub>n-p,n-p</sub>_ / _H<sub>n,n-p</sub>_ for _p=2,3,..._. It replaces _H<sub>n-p,n-p</sub>_ and _H<sub>n,n-p</sub>_ with errors from successive iterations of this approximation.  For example, if _H<sub>n-p,n-p</sub>=.5_ and _H<sub>n,n-p</sub>=.3_, a row operation would replace _H<sub>n-p,n-p</sub>_ by _.5-.3=.2_; and a second one would replace _H<sub>n,n-p</sub>_ with _.3-.2=.1_, etc. If these row operations terminate with a zero in _H<sub>n-p,n-p</sub>_, a row swap puts that zero in _H<sub>n,n-p</sub>_ and keeps _H<sub>n-p,n-p</sub>_ non-zero.
+
+#### Extent of Reductions
 
 If and when _|H<sub>n-p,n-p</sub>|_ is small compared to its neighbor to the left, _|H<sub>n-p,n-p-1</sub>|_, the reduction can stop, because what makes a swap of rows _n-p-1_ and _n-p_ move a large diagonal element _H<sub>n-p-1,n-p-1</sub>_ to the right is a small enough Euclidean length of the vector, (_H<sub>n-p,n-p-1</sub>_, _H<sub>n-p,n-p</sub>_). When to stop reducing is a parameter of the algorithm.
 
@@ -184,11 +188,15 @@ If _H<sub>n,n-p</sub>_ starts off at zero, no reduction can occur in column _n-p
 
 The zero in _H<sub>n,n-1</sub>_ makes reduction work for _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_. The zero in _(xB)<sub>n-1</sub>_ assures that row operations can put a zero in _H<sub>n,n-2</sub>_ while reducing _H<sub>n-2,n-2</sub>_, provided _x_ contains only integers (more on this below). There is no guarantee that reducing _H<sub>n-3,n-3</sub>_ can put a zero in _H<sub>n,n-3</sub>_, but if it can, that zero makes reduction possible in column _n-4_, etc.
 
+#### Reduction Unsticks Row Swaps
+
 Let's pause here to note what happens to _H_ in large dimensions, like 50 and above. In spite of the best efforts to move large diagonal elements towards the bottom right using row swaps from the classical PSLQ algorithm, the largest diagonal elements end up in the upper left. Even small numbers in the sub-diagonal, one below the main diagonal -- typically a hundredth to a tenth the size of the main diagonal elements -- prevent swaps of larger diagonal elements from left to right. Diagonal improvement via standard row swaps comes to a halt.
 
 All this changes, once small numbers appear in the diagonal close to the right-hand side of _H_. Row swaps are unstuck, as they can readily move these small diagonal elements to the upper left. After that is done, new large diagonal elements appear in _H<sub>n-2,n-2</sub>_, _H<sub>n-3,n-3</sub>_ ... and the cycle of diagonal reduction and standard row-swaps repeats.
 
-As promised, here is an explanation of why a zero appears in _H<sub>n,n-2</sub>_ when reducing _H<sub>n-2,n-2</sub>_, provided that _x_ contains only integers. The key is that
+#### Proof that at Least Two Diagonal Elements Can Be Reduced
+
+As promised, here is an explanation of why both _H<sub>n-2,n-2</sub>_ and _H<sub>n-3,n-3</sub>_ can be reduced given integer-valued input _x_ and a non-zero _H<sub>n,n-2</sub>_ and _H<sub>n,n-3</sub>_. As mentioned above, this is because a zero appears in _H<sub>n,n-2</sub>_ when reducing |_H<sub>n-2,n-2</sub>_|. The key to why that zero appears is that
 
 0 = _<((xB)<sub>n-2</sub>, (xB)<sub>n-1</sub>, (xB)<sub>n</sub>), (H<sub>n-2,n-2</sub>, H<sub>n-1,n-2</sub>, H<sub>n,n-2</sub>)>_
 
@@ -202,7 +210,7 @@ Three important details are:
 
 - Classic PSLQ reduces row _n_ during Hermite reduction. To keep _H<sub>n,n-2</sub>_ and _H<sub>n,n-3</sub>_ non-zero -- which puts new diagonal elements where they might profitably swap with _H<sub>n-1,n-1</sub>_ -- Hermite reduction should end short of row _n_. How far short of row _n_, under what conditions, is a parameter to adjust. Since swaps of rows near the bottom of _H_ mingle row _n_ with every other row, it may sometimes be necessary to stop Hermite reduction well short of the bottom of _H_ to keep zeroes out of row _n_ near _H<sub>n,n-1</sub>_.
 - When Hermite reduction is avoided in row _n-p_ for _p>0_, a problem emerges. Because no reduction was performed, the Euclidean length of the vector, _v_ = (_H<sub>n-p,n-p-1</sub>_, _H<sub>n-p,n-p</sub>_), may be large enough to keep the swap of rows _n-p-1_ and _n-p_ from helping to move large diagonal elements to the right. To reduce the length of _v_ without performing a full Hermite reduction, it is recommended to reduce just one element of row _n-p_, _|H<sub>n-p,n-p-1</sub>|_, to less than half of |_H<sub>n-p-1,n-p-1</sub>_|, by adding a multiple of row _n-p-1_ to row _n-p_.
-- When the reduced diagonal elements near the right of _H_ are swapped towards the upper left, new non-zero values appear in row _n_ of _H_, making this reduction possible once again. This happens during the removal of corners created by row swaps.
+- When the reduced diagonal elements in columns _n-2_, _n-3_, ... are swapped towards the upper left of _H_, new non-zero values appear in _H<sub>n,n-2</sub>_,  _H<sub>n,n-3</sub>_, ..., setting the conditions to perform this reduction technique once again. This happens during the removal of corners created by row swaps.
 
 It remains to be seen how many times the reduction of diagonal elements in the bottom-right of _H_ is allowed to proceed when the dimension is high; how stark the size of the current solution in column _n-1_ of _B_ becomes; and whether a rival to its size shows up in column _n-2_. But the hope is that the answers to those questions are "many, many times"; "very stark" and "very often". If so, PSLQ as an efficient solution to the shortest vector problem should break into dimension 50 and above, which is new territory for efficient algorithms.
 
@@ -306,9 +314,9 @@ In summary, _A<sub>k</sub>m_ is _m_ written as a combination of the columns of _
 
 There is a sharper bound than 1/|_H_| (from the original 1992 PSLQ paper) on the size of a solution while the algorithm is still running (i.e., when _H<sub>k</sub>_ has no 0s in its diagonal -- a fact used below). This bound,
 
-1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
+1/max(_|H<sub>1,1</sub>|_, _|H<sub>2,2</sub>|_, ..., _|H<sub>n-1,n-1</sub>|_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0,
 
-is found, among other places, on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https://www.cmor-faculty.rice.edu/~cox/lais/bundle.pdf) by Steven J. Cox. This is a textbook that covers many topics, including QR decomposition. QR decomposition is the same as LQ decomposition, used in PSLQ, except every matrix is transposed. Because the overall topic is QR decomposition in this work, every matrix in the PSLQ algorithm is transposed there; and many are renamed. In what follows, the argument in "Linear Algebra in Situ" is repeated here, but in the LQ context, using similar names to those in the original PSLQ paper and in the source code, `PSLQ.py`.
+is found, among other places, on pages 97-99 of [linear Algebra in Situ, CAAM 335, Fall 2016](https://www.cmor-faculty.rice.edu/~cox/lais/bundle.pdf) by Steven J. Cox. This is a textbook that covers many topics, including QR decomposition. QR decomposition is the same as LQ decomposition, used in PSLQ, except every matrix is transposed. Because the overall topic is QR decomposition in this work, every matrix in the PSLQ algorithm is transposed there; and many are renamed. In what follows, the argument in "Linear Algebra in Situ" is repeated here, but in the LQ context, using similar names to those in the original PSLQ paper and in the source code of this repository.
 
 ### Notation
 
@@ -353,7 +361,7 @@ _A<sub>k</sub>_ is the same "_A_" as in the original PSLQ paper.
 
 Computation of the bound mentioned at the beginning of this section,
 
-1/max(_H<sub>1,1</sub>_, _H<sub>2,2</sub>_, ..., _H<sub>n-1,n-1</sub>_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (equation 5),
+1/max(_|H<sub>1,1</sub>|_, _|H<sub>2,2</sub>|_, ..., _|H<sub>n-1,n-1</sub>|_) &leq; |_m_| for any solution _m_ of <_x_, _m_> = 0 (equation 5),
 
 begins with the LQ decomposition of _A<sub>k</sub>H<sub>x</sub>_:
 
