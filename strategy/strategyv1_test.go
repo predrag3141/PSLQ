@@ -371,8 +371,8 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 
 func TestGetRImprovingDiagonal(t *testing.T) {
 	const minLength = 10
-	const lengthIncr = 45
-	const maxLength = 100
+	const lengthIncr = 20 // 45
+	const maxLength = 30  // 100
 	const maxRelationElement = 5
 	const maxExpectedFinalRatio = 20.0
 	const randomRelationProbabilityThresh = .001

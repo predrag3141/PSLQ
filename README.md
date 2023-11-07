@@ -206,7 +206,108 @@ As promised, here is an explanation of why both _H<sub>n-2,n-2</sub>_ and _H<sub
 
 is an integer relation between _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_. This guarantees that _H<sub>n-2,n-2</sub> / H<sub>n,n-2</sub>_ is rational. The row operations that mirror the continued fraction approximation of this ratio put an error of zero in _H<sub>n,n-2</sub>_ (or _H<sub>n-2,n-2</sub>_) on the last of finitely many steps. If the zero appears in _H<sub>n-2,n-2</sub>_, you would just swap rows _n-2_ and _n_ to put the zero in _H<sub>n,n-2</sub>_.
 
-Three important details are:
+#### General Row Operations
+
+Since we are contemplating the placement of very small entries in the diagonal of _H_, it may take several rounds of row swaps, corner removals and reduction of sub-diagonal elements in the same 2x2 sub-matrix before this sub-matrix has its best ordering of diagonal elements. Consider, for example, the 2x2 sub-matrix
+_M<sub>k</sub>_ =
+<table border="1" style="border-color: black;">
+  <tr> <td>1</td> <td>0</td></tr>
+  <tr> <td>.5</td><td>.2</td> </tr>
+</table>
+
+After swapping rows and zeroing the corner,
+_M<sub>k+1</sub>_ =
+<table border="1" style="border-color: black;">
+  <tr> <td>.5385...</td> <td>0</td></tr>
+  <tr> <td>.9284...</td><td>.3713...</td> </tr>
+</table>
+
+A new round of row reduction, swap and corner removal finally yields the best form _M_ can take in isolation from the rest of _H_:
+_M<sub>k+2</sub>_ =
+<table border="1" style="border-color: black;">
+  <tr> <td>.4</td> <td>0</td></tr>
+  <tr> <td>.2</td><td>.5</td> </tr>
+</table>
+
+But there is a way to collapse the two rounds of swap, reduction and corner removal into one "general" (non-swap) row operation:
+_RM<sub>k</sub>Q_ =
+
+<table border="1" style="border-color: black;">
+  <tr> <td>1</td><td>-2</td><td  border="1" style="border: none"></td><td>1</td><td>0</td><td  border="1" style="border: none"></td><td>0</td><td>1</td><td  border="1" style="border: none">=</td></td><td>.4</td><td>0</td></tr>
+  <tr> <td>1</td><td>-1</td><td  border="1" style="border: none"></td><td>.5</td><td>.2</td><td  border="1" style="border: none"></td><td>-1</td><td>0</td><td  border="1" style="border: none"></td></td><td>.2</td><td>.5</td></tr>
+</table>
+
+To save operations when putting small elements in the diagonal, it could be worth the while to look for general row operations -- even though it does cost a bit to check for them. The reason small diagonal elements create the need for more than one round of row swaps will become apparent below.
+
+Suppose a small _&epsilon;<sub>1</sub>_ has just been placed in _H<sub>j+1,j+1</sub>_. The introduction of _&epsilon;<sub>1</sub>_ changes the balance of the diagonal elements in the _2x2_ sub-matrix, _M<sub>k</sub>_, containing _t=H<sub>j,j</sub>_, _u=H<sub>j+1,j</sub>_ and _&epsilon;<sub>1</sub>=H<sub>j+1,j+1</sub>_. Using continued fraction reduction, find relatively prime, non-zero integers _a_ and _b_ such that _at+bu=&epsilon;<sub>0</sub>_ is small. Let _R_ be the _2x2_ matrix with rows [_a_, _b_] and [_-w_, _v_] with minimum _|v|_ and determinant _1_. _R_ improves the diagonal of _M<sub>k</sub>_: _RM<sub>k</sub>=_
+
+<table border="1" style="border-color: black;">
+  <tr> </td><td>a</td><td>b</td><td  border="1" style="border: none"></td><td>t</td><td>0</td>          <td  border="1" style="border: none">=<td>&epsilon;0</td></td><td>b &epsilon;1</td></tr>
+  <tr> </td><td>-w</td><td>v</td><td  border="1" style="border: none"></td><td>u</td><td>&epsilon;1</td><td  border="1" style="border: none"></td><td>uv-tw</td></td><td>v &epsilon;1</td></tr>
+</table>
+
+After zeroing out the upper right corner, the diagonal elements of _M<sub>k+1</sub>_ have absolute values
+
+_|H<sub>j,j</sub>|_ &larr; _|&epsilon;<sub>2</sub>|_ := sqrt(&epsilon;<sub>0</sub><sup>2</sup> + _b<sup>2</sup> &epsilon;<sub>1</sub><sup>2</sup>_) and
+
+_|H<sub>j+1,j+1</sub>|_ &larr; _|&epsilon;<sub>3</sub>|_ := _|t &epsilon;<sub>1</sub> / &epsilon;<sub>2</sub>|_ (since |det(_M<sub>k+1</sub>_)| = |det(_M<sub>k</sub>_)| =_|t &epsilon;<sub>1</sub>|_)
+
+Let's compare _&epsilon;<sub>2</sub>_ to what _|H<sub>j,j</sub>|_ gets after a row swap and corner removal, which yeilds:
+
+_|H<sub>j,j</sub>|_ &larr; &epsilon;<sub>4</sub> := sqrt(_u<sup>2</sup>_ + _&epsilon;<sub>1</sub><sup>2</sup>_)
+
+_|H<sub>j+1,j+1</sub>|_ &larr; &epsilon;<sub>5</sub> := _|t &epsilon;<sub>1</sub> / &epsilon;<sub>4</sub>|_
+
+The row operation, _R_, performs better than a swap if it reduces _|H<sub>j,j</sub>|_ more, i.e.
+
+_|&epsilon;<sub>2</sub>|_ < _|&epsilon;<sub>4</sub>|_ &hArr; sqrt(_&epsilon;<sub>0</sub><sup>2</sup>_ + _b<sup>2</sup> &epsilon;<sub>1</sub><sup>2</sup>_) < sqrt(_u<sup>2</sup>_ + _&epsilon;<sub>1</sub><sup>2</sup>_)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&hArr; _&epsilon;<sub>0</sub><sup>2</sup>_ + _b<sup>2</sup> &epsilon;<sub>1</sub><sup>2</sup>_ < _u<sup>2</sup>_ + _&epsilon;<sub>1</sub><sup>2</sup>_
+
+&nbsp;&nbsp;&nbsp;&nbsp;&hArr; (_b<sup>2</sup> - 1) &epsilon;<sub>1</sub><sup>2</sup>_ < _u<sup>2</sup>_ - _&epsilon;<sub>0</sub><sup>2</sup>_
+
+From this we can conclude that
+
+- The general row operation, _R_, performs best when _b_ and _&epsilon;<sub>0</sub>_ are small. This is possible when _-a/b_ is a good approximation of _t/u_ with a small denominator -- the kind you get from continued fractions.
+
+- _b_ is not a unit, because that would be incompatible with the fact that after Hermite reduction, or reduction of just the sub-diagonal of _H_, _|u|_ &le; _|t|/2_. If you set _b_ to a unit, you get a contradiction as follows. Since _R_ is not a row swap, _a_ and _b_ are not zero. Therefore,
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_b<sup>2</sup> = 1_ &rArr; _|a|_ &ge; _|b|_ = _1_
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; _|&epsilon;<sub>0</sub>|_ = min(_|at+u|_, _|at-u|_) &ge; min(_|t+u|_, _|t-u|_) &ge;  _|t|_/2 (since _|u|_ &le; _|t|/2_)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; _u<sup>2</sup> - &epsilon;<sub>0</sub><sup>2</sup>_ &le; _u<sup>2</sup>_ - _t<sup>2</sup>/4_ (since _|&epsilon;<sub>0</sub>|_ &ge; _|t|/2_)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; (_b<sup>2</sup>-1_) &epsilon;<sub>1</sub><sup>2</sup> < _u<sup>2</sup> - &epsilon;<sub>0</sub><sup>2</sup>_ &le; _u<sup>2</sup>_ - _t<sup>2</sup>/4_  (since _R_ is better than a row swap)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; 0 < _u<sup>2</sup> - &epsilon;<sub>0</sub><sup>2</sup>_ &le; _u<sup>2</sup>_ - _t<sup>2</sup>/4_  (since _b<sup>2</sup> = 1_)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; _|t<sup>2</sup>|/4_ <  _u<sup>2</sup>_ (using the two ends of the inequality on the previous line)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; _|u|_ >  _|t|/2_,
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;which contradicts the premise that _|u|_ &le; _|t|/2_
+
+- Since _|b| &ge; 2_ as just shown,
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_(b<sup>2</sup> - 1) &epsilon;<sub>1</sub><sup>2</sup>_ < _u<sup>2</sup>_  &rArr; 3 &epsilon;<sub>1</sub><sup>2</sup> < _u<sup>2</sup>_,
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;so only swaps make sense unless _|&epsilon;<sub>1</sub>|_ < sqrt(3) _|u|_.
+
+- Since the condition (_b<sup>2</sup> - 1) &epsilon;<sub>1</sub><sup>2</sup>_ < _u<sup>2</sup>_ - _&epsilon;<sub>0</sub><sup>2</sup>_ is what makes _R_ better than a row swap, the range of values of _b_ to consider as the upper-right entry of _R_ satisfies
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_3_ &le; _b<sup>2</sup>_ &le; _1_ + (_u<sup>2</sup> - &epsilon;<sub>0</sub><sup>2</sup>_) / &epsilon;<sub>1</sub><sup>2</sup> &le; _1_ + _u<sup>2</sup>_ / &epsilon;<sub>1</sub><sup>2</sup>
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; 2 &le; _|b|_ &le; sqrt(_1_ + _u<sup>2</sup>_ / &epsilon;<sub>1</sub><sup>2</sup>),
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;which gives a stopping condition for the reduction of _t_ and _u_. 
+
+To take advantage of the foregoing analysis, a strategy like reduction of diagonal elements against row _n_ that places very small elements in the diagonal of _H_ should save time using general row operations. After placing &epsilon;<sub>1</sub> in _H<sub>j+1,j+1</sub>_, the strategy would reduce _t=H<sub>j,j</sub>_ against _u=H<sub>j+1,j</sub>_, storing the reduced entry in _H<sub>j,j</sub>_ and the version of _R_ that puts it there at each stage.
+ If the smallest of the stored _H<sub>j,j</sub>_ entries is smaller than sqrt(_u<sup>2</sup> + &epsilon;<sub>1</sub><sup>2</sup>_), the strategy would use the corresponding _R_ instead of a row swap in the next PSLQ iteration.
+
+#### Final Thoughts on Reduction
+
+Three important details about are:
 
 - Classic PSLQ reduces row _n_ during Hermite reduction. To keep _H<sub>n,n-2</sub>_ and _H<sub>n,n-3</sub>_ non-zero -- which puts new diagonal elements where they might profitably swap with _H<sub>n-1,n-1</sub>_ -- Hermite reduction should end short of row _n_. How far short of row _n_, under what conditions, is a parameter to adjust. Since swaps of rows near the bottom of _H_ mingle row _n_ with every other row, it may sometimes be necessary to stop Hermite reduction well short of the bottom of _H_ to keep zeroes out of row _n_ near _H<sub>n,n-1</sub>_.
 - When Hermite reduction is avoided in row _n-p_ for _p>0_, a problem emerges. Because no reduction was performed, the Euclidean length of the vector, _v_ = (_H<sub>n-p,n-p-1</sub>_, _H<sub>n-p,n-p</sub>_), may be large enough to keep the swap of rows _n-p-1_ and _n-p_ from helping to move large diagonal elements to the right. To reduce the length of _v_ without performing a full Hermite reduction, it is recommended to reduce just one element of row _n-p_, _|H<sub>n-p,n-p-1</sub>|_, to less than half of |_H<sub>n-p-1,n-p-1</sub>_|, by adding a multiple of row _n-p-1_ to row _n-p_.
