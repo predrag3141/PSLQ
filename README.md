@@ -83,7 +83,7 @@ Lemma 10 relies on the assumptions listed below, which are not broken by any row
 The assumptions are:
 
 - _AP<sub>x</sub>_ = _TDQ<sup>t</sup>H<sub>x</sub><sup>t</sup>_ is a decomposition of AP<sub>x</sub> into into the product of a lower trapezoidal matrix _T_ with diagonal _1s_, an invertible diagonal matrix _D_ with the same diagonal as _H_, and an _n−1×n_ matrix _Q<sup>t</sup>H<sub>x</sub><sup>t</sup>_ with orthonormal rows. This, by the way, is copied from the proof of theorem 1, not lemma 10. But the proof of lemma 10 is trying to say this and doesn't quite accomplish the task.
-- At the point where a zero appears in _H<sub>n,n-1</sub>_, the the _(n−1)_-st column of _B_ is _m_.
+- At the point where a zero appears in _H<sub>n,n-1</sub>_, the _(n−1)_-st column of _B_ is _m_.
 
 Based on the second assumption,
 
@@ -274,7 +274,7 @@ From this we can conclude that
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_b<sup>2</sup> = 1_ &rArr; _|a|_ &ge; _|b|_ = _1_
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; _|&epsilon;<sub>0</sub>|_ = min(_|at+u|_, _|at-u|_) &ge; min(_|t+u|_, _|t-u|_) &ge;  _|t|_/2 (since _|u|_ &le; _|t|/2_)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; _|&epsilon;<sub>0</sub>|_ &ge; min(_|at+u|_, _|at-u|_) &ge; min(_|t+u|_, _|t-u|_) &ge;  _|t|_/2 (since _|u|_ &le; _|t|/2_)
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rArr; _u<sup>2</sup> - &epsilon;<sub>0</sub><sup>2</sup>_ &le; _u<sup>2</sup>_ - _t<sup>2</sup>/4_ (since _|&epsilon;<sub>0</sub>|_ &ge; _|t|/2_)
 
@@ -302,8 +302,10 @@ From this we can conclude that
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;which gives a stopping condition for the reduction of _t_ and _u_. 
 
+The last bullet puts us in a position to circle back to a claim above. The claim was that introducing small elements into the diagonal of _H_ creates the need for multiple rounds of swaps, corner removal and reduction, unless general row operations are used. It is believed that each such round corresponds to one round of continued fraction approximation of _t_ and _u_. Though this is not proven here, the last bullet shows that when _|&epsilon;<sub>1</sub>|_ is small (compared to _|u|_), an _R_ with a large upper-right entry _b_ still has the potential to out-perform a row swap. Large entries comparable in absolute value to sqrt(_1_ + _u<sup>2</sup>_ / &epsilon;<sub>1</sub><sup>2</sup>) only appear in _R_ after multiple rounds of continued fraction approximation.
+
 To take advantage of the foregoing analysis, a strategy like reduction of diagonal elements against row _n_ that places very small elements in the diagonal of _H_ should save time using general row operations. After placing &epsilon;<sub>1</sub> in _H<sub>j+1,j+1</sub>_, the strategy would reduce _t=H<sub>j,j</sub>_ against _u=H<sub>j+1,j</sub>_, storing the reduced entry in _H<sub>j,j</sub>_ and the version of _R_ that puts it there at each stage.
- If the smallest of the stored _H<sub>j,j</sub>_ entries is smaller than sqrt(_u<sup>2</sup> + &epsilon;<sub>1</sub><sup>2</sup>_), the strategy would use the corresponding _R_ instead of a row swap in the next PSLQ iteration.
+ If the smallest absolute value of the stored _H<sub>j,j</sub>_ entries is smaller than sqrt(_u<sup>2</sup> + &epsilon;<sub>1</sub><sup>2</sup>_), the strategy would use the corresponding _R_ instead of a row swap in the next PSLQ iteration.
 
 #### Final Thoughts on Reduction
 
