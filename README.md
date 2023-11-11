@@ -26,9 +26,9 @@ Rather than run down all the details of the transformation of the LWE problem in
 
 Without some changes, PSLQ is not a useful tool for cryptanalysis. PSLQ is designed to handle non-integer, real input. Given integer input, PSLQ as defined in the original 1992 paper quickly finds a bad (high-norm) solution, _m_, and terminates.
 
-Read on to see in detail how this problem can be fixed. For now, let it suffice to say that PSLQ as originally defined is both a framework and a strategy. The framework consists of a matrix equation and a set of allowed operations on this equation that change its components until a solution of _<x, m> = 0_ is found.
+Read on to see in detail how this problem can be fixed. For now, let it suffice to say that PSLQ as originally defined is both a framework and a strategy. The framework consists of a matrix equation and a set of allowed operations on this equation that change its components until a solution of _<x,m> = 0_ is found.
 
-The strategy specifies what operations to perform, and when to perform them. The framework cannot change, because it is what guarantees some invariants needed to solve _<x, m> = 0_. The strategy most certainly can be modified, and has been in papers like [this](https://community.ams.org/journals/mcom/2001-70-236/S0025-5718-00-01278-3/S0025-5718-00-01278-3.pdf), where one of the authors of the original 1992 paper proposes a strategy that can take advantage of parallel processing.
+The strategy specifies what operations to perform, and when to perform them. The framework cannot change, because it is what guarantees some invariants needed to solve _<x,m> = 0_. The strategy most certainly can be modified, and has been in papers like [this](https://community.ams.org/journals/mcom/2001-70-236/S0025-5718-00-01278-3/S0025-5718-00-01278-3.pdf), where one of the authors of the original 1992 paper proposes a strategy that can take advantage of parallel processing.
 
 The adjective, "classic", in both this README and in the code, refers to the original strategy suggested in the 1992 paper. The classic strategy is geared towards proving bounds on the performance of PSLQ, so it can be considered a polynomial time algorithm that finds solutions within a certain factor of the optimal solution.
 
@@ -50,9 +50,9 @@ PSLQ stores _AH<sub>x</sub>Q_, which we will call _H_ (as opposed to _H<sub>x</s
 
 _xBH_ = _0_ (equation 2)
 
-Both _x_ and _H<sub>x</sub>_ remain fixed at their initial values, whereas _B_, _A_ and _H_ are updated while PSLQ runs. _Q_ itself is not stored directly, but is implicitly stored by storing _H_. 
+Both _x_ and _H<sub>x</sub>_ remain fixed at their initial values, whereas _B_, _A_ and _H_ are updated while PSLQ runs. _Q_ itself is not stored directly, but is implicitly stored by storing _H_. _H_ and _H<sub>x</sub>_ are non-zero on the diagonal and zero above the diagonal.
 
-The last column of _H_ -- column _n-1_ -- is mostly _0_. It contains non-zero values in at most its last two entries. It would be a shame if something happened to one of those entries, like _H<sub>n-1,n-1</sub>_ becoming _0_. That would leave just one non-zero entry in column _n-1_, namely _H<sub>n,n-1</sub>_. Then the fact that _(xBH)<sub>n-1</sub>_ = 0 (along with the other entries of _xBH_) would mean that _(xB)<sub>n</sub>_ = _0_.
+Because _H_ is zero above the diagonal, the last column of _H_ -- column _n-1_ -- is mostly _0_. It contains non-zero values in at most its last two entries. It would be a shame if something happened to one of those entries, like _H<sub>n-1,n-1</sub>_ becoming _0_. That would leave just one non-zero entry in column _n-1_, namely _H<sub>n,n-1</sub>_. Then the fact that _(xBH)<sub>n-1</sub>_ = 0 (along with the other entries of _xBH_) would mean that _(xB)<sub>n</sub>_ = _0_.
 
 Of course this wouldn't really be a shame. According to equation 2, _H<sub>n-1,n-1</sub>_ = 0 and _H<sub>n,n-1</sub>_ &ne; _0_ would mean that the last entry of _xB_ -- the coefficient of _H<sub>n,n-1</sub>_ in equation 2 -- has to be _0_. In other words,
 
@@ -62,11 +62,15 @@ This means that -- once _H<sub>n-1,n-1</sub>_ is forced to be zero -- setting _m
 
 So the idea of PSLQ is to force a _0_ into the last diagonal element of _H_ while maintaining _0s_ above the diagonal of _H_ and the validity of equation 2. When that happens, PSLQ reaps a solution of _<x,m>=0_ from column _n_ of _B_!
 
-The way _B_, _A_ and _H_ are modified is through row operations on _A_, and their inverses as column operations on _B_.
+The way _B_, _A_ and _H_ are modified is through row operations on _A_, and their inverses as column operations on _B_. These row operations put non-zero values above the diagonal of _H_, which the last factor in equation 1, _Q_ zeroes out with a rotation. Zeroing out entries of _H_ above the diagonal is called "corner removal", because it removes the non-zero upper-right corner entry from a 2x2 sub-matrix of _H_. It is essential that _Q_ be a rotation so the diagonal entries of _H_ track the norms of potential solutions of _<x,m> = 0_.
 
-Given this framework, what is needed is a strategy that zeroes out _H<sub>n,n-1</sub>_ to force a solution of _<x, m> = 0_ into a column of _B_. As noted earlier, there are many reasonable strategies. The primary example is classic strategy from the original 1992 paper: Swap rows according to a criterion governed by a parameter, &gamma;. When _j < n-1_ and _&gamma;<sup>j</sup>_|H<sub>j,j</sub>|_ _&ge;_ _&gamma;<sup>i</sup>_|H<sub>i,i</sub>|_ for all _i_, it is rows _j_ and _j+1_ that are swapped. If no _j_ satisfies this criterion, rows _n-1_ and _n_ are swapped.
+The row operations on _A_ are designed not only to force a zero into _H<sub>n-1,n-1</sub>_, but to nudge the large diagonal entries of _H_ towards the right, for reasons explained later. These goals have random effects on the entries of _H_ below the diagonal. Left unchecked, these effects would cause the sub-diagonal of _H_ to grow without bound. To offset this, the original 1992 PSLQ paper specifies the use of what it calls Hermite reduction, which aggressively minimizes the entries below the diagonal of _H_.
 
-The classic strategy is good if there is just one independent solution of _<x, m> = 0_, but not good if there are many. In cryptanalytic use cases, there are many independent solutions of _<x, m> = 0_, so this README develops alternative strategies to find good solutions among the many.
+Up to the mention of Hermite reduction, everything in the description above can be considered the framework of PSLQ. Hermite reduction, in lieu of other kinds of reduction of _H_ below the diagonal, can be considered part of the strategy for putting a zero in _H<sub>n-1,n-1</sub>_ to force a solution of _<x,m> = 0_ into a column of _B_.
+
+As noted earlier, there are many reasonable strategies. The primary example is the classic strategy from the original 1992 paper: Swap rows according to a criterion governed by a parameter, &gamma;. When _j < n-1_ and _&gamma;<sup>j</sup>_|H<sub>j,j</sub>|_ _&ge;_ _&gamma;<sup>i</sup>_|H<sub>i,i</sub>|_ for all _i_, it is rows _j_ and _j+1_ that are swapped. If no _j_ satisfies this criterion, rows _n-1_ and _n_ are swapped. After swapping, update _Q_ to remove the corner just created (unless swapping rows _n-1_ and _n_), and perform Hermite reduction.
+
+The classic strategy is good if there is just one independent solution of _<x,m> = 0_, but not good if there are many. In cryptanalytic use cases, there are many independent solutions of _<x,m> = 0_, so this README develops alternative strategies to find good solutions among the many.
 
 ## The Importance of the Diagonal of H
 
@@ -83,10 +87,10 @@ Lemma 10 is crucial to the strategies employed in this repository, so we need to
 
 Lemma 10 relies on the assumptions listed below, which are not broken by any row operation with determinant 1 or -1 ("unit determinant"), or any rotation to remove zeroes above the diagonal of H. These assumptions refer to
 
-- A matrix P<sub>x</sub>, defined in the statement of lemma 2
+- A matrix P<sub>x</sub>, defined in the statement of lemma 2 in the same paper
 - _m_, the solution the PSLQ algorithm is about to output, when rows _n-1_ and _n_ are swapped.
 - _A_, the matrix with integer entries and unit determinant that is the product of all previous row operations.
-- _B=A<sup>-1</sup>_, following the notation used here, though in the proof of lemma 10 "_A<sup>-1</sup>_" is the notation for this matrix.
+- _B=A<sup>-1</sup>_, following the notation used here, though in the proof of lemma 10 "_A<sup>-1</sup>_" is the notation for what we call _B_ throughout this README.
 
 The assumptions are:
 
@@ -95,9 +99,9 @@ The assumptions are:
 
 Based on the second assumption,
 
-_Am<sup>t</sup>_ =_<B<sup>-1</sup>,_ column _n-1_ of _B>_ = _e<sub>n−1</sub>_, the _(n−1)_-st standard basis vector
+_Am<sup>t</sup>_ =_<B<sup>-1</sup>,_ column _n-1_ of _B>_ = _e<sub>n−1</sub>_, the _(n−1)_-st standard basis vector.
 
-(true for any _B<sup>-1</sup>_ and _B_), which is stated in the proof of lemma 10 without connecting this statement to the second assumption. So _Am<sup>t</sup>=e<sub>n-1</sup>_ is not a separate assumption.
+The second of the two "=" signs is true for any _B<sup>-1</sup>_ and _B_. The left and right quantities are equated in the proof of lemma 10 without connecting this equality to the second assumption. So _Am<sup>t</sup>=e<sub>n-1</sup>_ can appear to be a separate assumption but it's not.
 
 With all of the above, lemma 10 is more readable and its assumptions are clear. The first assumption depends only on the initial setup of PSLQ and the fact that _A_ has integer entries and unit determiannt; so no row operation with unit determinant falsifies it.
 
@@ -107,19 +111,19 @@ The second assumption relies only on the fact that _(xBH)<sub>n-1</sub>_ = 0. We
 
 Each iteration of PSLQ performs a pair of row operations on _H_ -- one to tame the diagonal of _H_, another to reduce the entries below the diagonal. In this section, "row operation" refers to the former, designed to tame the diagonal of _H_. Any row operation with determinant 1 or -1 is acceptable. But the original 1992 PSLQ paper and the 1999 analysis of PSLQ consider only swaps of adjacent rows.
 
-The reason for re-implementing PSLQ here, rather than using an existing implementation, is to extend the algorithm in the original 1992 PSLQ paper with
+The reason for re-implementing PSLQ here, rather than using an existing implementation, is to replace the classic strategy in the original 1992 PSLQ paper with
 - Row operations other than swaps of adjacent rows
 - Swaps of adjacent rows chosen with criteria other than the ones specified in the original 1992 PSLQ paper
-- Delaying termination until largest possible entry appears in _H<sub>n-1,n-1</sub>_
+- Delaying termination until best possible solution becomes available.
 
-Using these three extensions to "improve" the diagonal of H trades provable performance for empirically verified accuracy. Proofs of both accuracy and speed are presented in the original 1992 PSLQ paper and in the 1999 paper analyzing PSLQ. But the accuracy bounds these proofs promise are poor, as `Table 1` below shows in its results for the `Classic` strategy, which is what the 1992 and 1999 papers propose.
+Using these three extensions to "improve" the diagonal of H trades provable performance for empirically verified accuracy. Proofs of both accuracy and speed are presented in the original 1992 PSLQ paper and in the 1999 paper analyzing PSLQ. But the accuracy bounds these proofs promise are poor, as `Table 1` below shows in its results for the classic strategy, which the 1992 (and 1999) papers propose.
 
-Because the accuracy guarantees in the 1992 and 1999 PSLQ papers are not much good, the three extensions in this repository gladly sacrifice them, along with any and all speed guarantees, in exchange for empirically demonstrated, albeit not mathematically proven, improvements in accuracy. Empirical results in `Table 1` show that the improved accuracy comes at the cost of speed. It would not be surprising if the speed remains polynomial, but with an increase of 1 in the degree of the polynomial.
+Because the accuracy guarantees in the 1992 and 1999 PSLQ papers do not meet the needs of cryptographic use cases, the three extensions in this repository sacrifice them, along with speed guarantees, in exchange for empirically demonstrated, albeit not mathematically proven, improvements in accuracy. Empirical results in `Table 1` show that the improved accuracy comes at the cost of speed. It would not be surprising if the speed remains polynomial, but with an increase of 1 in the degree of the polynomial.
 
-`Table 1` contains a column called `strategy`.  A "strategy" is a set of rules for choosing row operations to imrpove the diagonal of _H_. The strategies compared in `Table 1` are:
+`Table 1` contains a column called `strategy`.  As noted earlier, a "strategy" is a set of rules for choosing row operations to imrpove the diagonal of _H_. The strategies compared in `Table 1` are:
 
 - `Classic`: Swap rows to improve the diagonal of _H_ as recommended in the original PSLQ paper, until a zero-valued entry is swapped into the last diagonal element of H; terminate when that happens.
-- `IDASIF`: "Improve diagonal after solution is found". Use the `Classic` strategy until a zero is about to be swapped into the last diagonal entry of _H_. Then instead of swapping in that zero and terminating, use row operations to improve the last three columns of the table below, until there are no row operations left to perform that improve the diagonal.
+- `IDASIF`: "Improve diagonal after solution is found". Use the `Classic` strategy until a zero is about to be swapped into the last diagonal entry of _H_. Then instead of swapping in that zero and terminating, use row operations to improve the last three columns of the table below, until there are no row operations left to perform that improve the diagonal. `IDASIF` is an early version of the as-yet untested "Swap, Reduce, Solve" strategy.
 
 It is understood that, just based on the description above, `IDASIF` is not a well-defined strategy. To learn the details, search `improveDiagonalWhenAboutToTerminate` in `strategy/strategy.go`.
 
