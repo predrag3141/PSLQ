@@ -574,6 +574,51 @@ func TestBigNumber_Quo(t *testing.T) {
 	assert.Errorf(t, err, "BigNumber.Quo: division by zero")
 }
 
+func TestBigNumber_RoundTowardsZero(t *testing.T) {
+	for i := int64(-10); i < 10; i++ {
+		var expected int64
+		var inputValue *BigNumber
+		var actual *int64
+		var inputValueAsStr string
+		baseValue := NewFromInt64(i)
+
+		// Test exact integers
+		inputValue = NewFromInt64(i)
+		expected = i
+		actual = inputValue.RoundTowardsZero()
+		_, inputValueAsStr = inputValue.String()
+		assert.NotNilf(t, actual, "i: %d, inputValue: %q", i, inputValueAsStr)
+		assert.Equalf(t, expected, *actual, "i: %d, inputValue: %q", i, inputValueAsStr)
+
+		// Test adding and subtracting a fraction
+		for j := int64(1); j <= 101; j += 10 {
+			// Test adding a fraction
+			inputValue = NewFromInt64(0).Add(baseValue, NewPowerOfTwo(-j))
+			if i < 0 {
+				expected = i + 1
+			} else {
+				expected = i
+			}
+			actual = inputValue.RoundTowardsZero()
+			_, inputValueAsStr = inputValue.String()
+			assert.NotNilf(t, actual, "i: %d, j: %d, inputValue: %q", i, j, inputValueAsStr)
+			assert.Equalf(t, expected, *actual, "i: %d, j: %d, inputValue: %q", i, j, inputValueAsStr)
+
+			// Test subtracting a fraction
+			inputValue = NewFromInt64(0).Sub(baseValue, NewPowerOfTwo(-j))
+			if i <= 0 {
+				expected = i
+			} else {
+				expected = i - 1
+			}
+			actual = inputValue.RoundTowardsZero()
+			_, inputValueAsStr = inputValue.String()
+			assert.NotNilf(t, actual, "i: %d, j: %d, inputValue: %q", i, j, inputValueAsStr)
+			assert.Equalf(t, expected, *actual, "i: %d, j: %d, inputValue: %q", i, j, inputValueAsStr)
+		}
+	}
+}
+
 func TestBigNumber_Int64Mul(t *testing.T) {
 	testInt64Mul(t, 2594873, "1610.861054", "4179979855.776142")
 	testInt64Mul(t, 1610, "2594873.338", "4177746074.18")
@@ -601,14 +646,20 @@ func TestBigNumber_IsInt(t *testing.T) {
 }
 
 func TestBigNumber_IsSmall(t *testing.T) {
+	zero := NewFromInt64(0)
 	shouldBeSmall00 := NewPowerOfTwo(-precision / 2)
+	shouldBeSmall01 := NewFromInt64(0).Sub(zero, shouldBeSmall00)
 	shouldNotBeSmall00 := NewPowerOfTwo(-precision / 4)
-	shouldBeSmall01 := NewFromInt64(0)
 	shouldNotBeSmall01 := NewFromInt64(1)
+	shouldNotBeSmall02 := NewFromInt64(0).Sub(zero, shouldNotBeSmall00)
+	shouldNotBeSmall03 := NewFromInt64(-1)
+	assert.True(t, zero.IsSmall())
 	assert.True(t, shouldBeSmall00.IsSmall())
-	assert.False(t, shouldNotBeSmall00.IsSmall())
 	assert.True(t, shouldBeSmall01.IsSmall())
+	assert.False(t, shouldNotBeSmall00.IsSmall())
 	assert.False(t, shouldNotBeSmall01.IsSmall())
+	assert.False(t, shouldNotBeSmall02.IsSmall())
+	assert.False(t, shouldNotBeSmall03.IsSmall())
 }
 
 func TestBigNumber_Set(t *testing.T) {

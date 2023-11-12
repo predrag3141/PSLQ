@@ -641,6 +641,44 @@ func (bn *BigNumber) Quo(x *BigNumber, y *BigNumber) (*BigNumber, error) {
 	return bn, nil
 }
 
+// RoundTowardsZero returns a pointer to the largest integer in absolute value
+// between zero and bn, if that fits in an int64; otherwise nil
+func (bn *BigNumber) RoundTowardsZero() *int64 {
+	if bn.log2scale < 0 {
+		denominator := powerOf2(-bn.log2scale)
+		retValAsBigInt := big.NewInt(0).Quo(&bn.numerator, denominator)
+		if retValAsBigInt.IsInt64() {
+			retVal := retValAsBigInt.Int64()
+			return &retVal
+		}
+
+		// bn, after rounding towards zero, does not fit into an int64
+		return nil
+	}
+
+	// bn.log2scale is non-negative
+	if bn.log2scale == 0 {
+		if bn.numerator.IsInt64() {
+			retVal := bn.numerator.Int64()
+			return &retVal
+		}
+
+		// bn does not fit into an int64
+		return nil
+	}
+
+	// bn.log2scale > 0
+	multiplier := powerOf2(bn.log2scale)
+	retValAsBigInt := big.NewInt(0).Mul(&bn.numerator, multiplier)
+	if retValAsBigInt.IsInt64() {
+		retVal := retValAsBigInt.Int64()
+		return &retVal
+	}
+
+	// bn does not fit into an int64
+	return nil
+}
+
 // AsFloat returns a big.Float with the value of the provided input
 // to within 2^-precision.
 //
