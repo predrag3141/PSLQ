@@ -60,7 +60,7 @@ _<x,last column B>_ = _0_
 
 This means that -- once _H<sub>n-1,n-1</sub>_ is forced to be zero -- setting _m_ to the last column of _B_ makes _m_ a solution with integer entries of _<x,m>_ = _0_.
 
-So the idea of PSLQ is to force a _0_ into the last diagonal element of _H_ while maintaining _0s_ above the diagonal of _H_ and the validity of equation 2. When that happens, PSLQ reaps a solution of _<x,m>=0_ from column _n_ of _B_!
+So the idea of PSLQ is to force a _0_ into the last diagonal element of _H_ while maintaining _0s_ above the diagonal of _H_ and the validity of equation 2. When that happens, PSLQ reaps a solution of _<x,m> = 0_ from column _n_ of _B_!
 
 The way _B_, _A_ and _H_ are modified is through row operations on _A_, and their inverses as column operations on _B_. These row operations put non-zero values above the diagonal of _H_, which the last factor in equation 1, _Q_ zeroes out with a rotation. Zeroing out entries of _H_ above the diagonal is called "corner removal", because it removes the non-zero upper-right corner entry from a 2x2 sub-matrix of _H_. It is essential that _Q_ be a rotation so the diagonal entries of _H_ track the norms of potential solutions of _<x,m> = 0_.
 
@@ -220,7 +220,7 @@ But the same that goes for column _n-1_ of _H_ goes for the other columns. Once 
 
 for which _DHN_ has zeroes in column _n-p_, except _(DHN)<sub>n-p,n-p</sub>&ne;0_.
 
-On the final step of PSLQ, _A_ is replaced by _DA_, _H_ by _DHN_ and _B_ by _BE_. The fact that _(xB)<sub>n-p</sub>=0_ means that column _n-p_ of _B_ is a solution of _<x,m>=0_. After these replacements, in every column _n-p_ with _H<sub>n,n-p</sub>=0_, column _n-p_ of _B_ is a solution of _<x,m>=0_.
+On the final step of PSLQ, _A_ is replaced by _DA_, _H_ by _DHN_ and _B_ by _BE_. The fact that _(xB)<sub>n-p</sub>=0_ means that column _n-p_ of _B_ is a solution of _<x,m> = 0_. After these replacements, in every column _n-p_ with _H<sub>n,n-p</sub>=0_, column _n-p_ of _B_ is a solution of _<x,m> = 0_.
 
 It is expected, but not proven here, that when PSLQ terminates this way, an analog of lemma 10 from the 1997 analysis of PSLQ extends to _|H<sub>n-p,n-p</sub>|_: the solution obtained by putting a zero in _H<sub>n,n-p</sub>_ has norm 1/|H<sub>n-p,n-p</sub>|; but in this case, that norm is distorted to the extent that _N_ is not a rotation. If so, it is important that _D_ be a full Hermite reduction of _H_ as described in the original 1992 PSLQ paper, making the interior of _H_ below the diagonal small so that _N_ can have small elements off its diagonal. That way, the actual norm of column _n-p_ of _B_ is as close as possible to _1/|H<sub>n-p,n-p</sub>|_.
 
@@ -238,9 +238,9 @@ The SRS strategy runs in three modes, <b>Swap</b>, <b>Reduce</b> and <b>Solve</b
 - <b>Swap</b>: Swap rows (or perform a general integer-valued, unit-determinant row operation) when doing so improves the diagonal of _H_. Improving the diagonal is defined as starting with _|H<sub>j,j</sub>| > |H<sub>j+1,j+1</sub>|_ for some _j_ with _1 &le; j < n-1_, performing a row operation and corner removal, and thereby reducing _|H<sub>j,j</sub>|_. The row operation to perform on each iteration is the one that reduces _|H<sub>j,j,</sub>|_ by the greatest factor over all choices of _j_ and all operations on rows _j_ and _j+1_. At the end of each iteration in <b>Swap</b> mode, perform gentle Hermite reduction on the modified rows.
 - <b>Termination Check</b>: If the maximum diagonal element is in a column _j_ for which _H<sub>n,j</sub>_ is zero, or if all of row _n_ is zero, terminate the PSLQ algorithm and use the procedure described in the section, "A Zero in Row _n_ Generates a Solution" to generate the available solutions.
 - <b>Reduce</b>: At some point, no swap or other row operation involving rows _1_ through _n-1_ is left that improves the diagonal of _H_. Let _n-p_ be the number of the rightmost column for which _H<sub>n,n-p</sub>_ is not zero. Reduce _H<sub>n-p,n-p</sub>_ against _H<sub>p,n-p</sub>_ with continued fraction approximations, until one of the pair reaches a pre-determined, non-zero minimum and <b>Swap</b> mode can reduce _|H<sub>n-p-1,n-p-1</sub>|_; or one of the pair reaches zero. If zero < _|H<sub>n,n-p</sub>|_ < _|H<sub>n-p,n-p</sub>|_, swap rows _n-p_ and _n_ to minimize the diagonal. Perform gentle Hermite reduction on rows _n-p_ and _n_.
-- <b>Solve</b>: If _H<sub>n-p,n-p</sub>_ or _H<sub>p,n-p</sub>_ reaches zero in the <b>Reduce</b> stage, a solution of _<x,m>_ has become available, as described in the section, "A Zero in Row _n_ Generates a Solution". If this has enabled a row operation to reduce _|H<sub>n-p-1,n-p-1</sub>|_, use that fact to return to the <b>Swap</b> mode. Otherwise, proceed to <b>Reduce</b> mode using _H<sub>n-p-1,n-p-1</sub>_ and _H<sub>n,n-p-1</sub>_.
+- <b>Solve</b>: If _H<sub>n-p,n-p</sub>_ or _H<sub>p,n-p</sub>_ reaches zero in the <b>Reduce</b> stage, a solution of _<x,m> = 0_ has become available, as described in the section, "A Zero in Row _n_ Generates a Solution". If this has enabled a row operation to reduce _|H<sub>n-p-1,n-p-1</sub>|_, use that fact to return to the <b>Swap</b> mode. Otherwise, proceed to <b>Reduce</b> mode using _H<sub>n-p-1,n-p-1</sub>_ and _H<sub>n,n-p-1</sub>_.
 
-Note that after <b>Solve</b> mode puts a zero in row _n_, <b>Swap</b> mode may overwrite it with corner removal. This happens if, in column _n-p_ with a zero in row _n_ contains diagonal element _H<sub>n-p,n-p</sub>_ small enough that <b>Swap</b> mode performs a row operation on rows _n-p-1_ and _n-p_, then removes the corner in _H<sub>n-p-1,n-p</sub>_.
+Note that after <b>Solve</b> mode puts a zero in row _n_, <b>Swap</b> mode may overwrite it with corner removal. This happens if, in column _n-p_ with a zero in row _n_, the diagonal element _H<sub>n-p,n-p</sub>_ is small enough that <b>Swap</b> mode performs a row operation on rows _n-p-1_ and _n-p_, then removes the corner in _H<sub>n-p-1,n-p</sub>_. In the course of that corner removal, the zero in _H<sub>n,n-p</sub>_ is replaced by a non-zero.
 
 #### Heuristics Supporting the SRS Strategy
 
@@ -348,7 +348,7 @@ From this we can conclude that
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_(b<sup>2</sup> - 1) &epsilon;<sub>1</sub><sup>2</sup>_ < _u<sup>2</sup>_  &rArr; 3 &epsilon;<sub>1</sub><sup>2</sup> < _u<sup>2</sup>_,
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;so only swaps make sense unless _|&epsilon;<sub>1</sub>|_ < sqrt(3) _|u|_.
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;so only row swaps make sense unless _|&epsilon;<sub>1</sub>|_ < _|u|_ / sqrt(3).
 
 - Since _|b| &ge; 2_ and the condition (_b<sup>2</sup> - 1) &epsilon;<sub>1</sub><sup>2</sup>_ < _u<sup>2</sup>_ - _&epsilon;<sub>0</sub><sup>2</sup>_ is what makes _R_ better than a row swap, the range of values of _b_ to consider as the upper-right entry of _R_ satisfies
 
