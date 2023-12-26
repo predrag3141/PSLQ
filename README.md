@@ -118,12 +118,12 @@ The reason for re-implementing PSLQ here, rather than using an existing implemen
 
 Using these three extensions to "improve" the diagonal of H trades provable performance for empirically verified accuracy. Proofs of both accuracy and speed are presented in the original 1992 PSLQ paper and in the 1999 paper analyzing PSLQ. But the accuracy bounds these proofs promise are poor, as `Table 1` below shows in its results for the classic strategy, which the 1992 (and 1999) papers propose.
 
-Because the accuracy guarantees in the 1992 and 1999 PSLQ papers do not meet the needs of cryptographic use cases, the three extensions in this repository sacrifice them, along with speed guarantees, in exchange for empirically demonstrated, albeit not mathematically proven, improvements in accuracy. Empirical results in `Table 1` show that the improved accuracy comes at the cost of speed. It would not be surprising if the speed remains polynomial, but with an increase of 1 in the degree of the polynomial.
+Because the accuracy guarantees in the 1992 and 1999 PSLQ papers do not meet the needs of cryptographic use cases, the extensions in this repository sacrifice them, along with speed guarantees, in exchange for empirically demonstrated, albeit not mathematically proven, improvements in accuracy. Empirical results in `Table 1` show that the improved accuracy comes at the cost of speed. It would not be surprising if the speed remains polynomial, but with an increase of 1 in the degree of the polynomial.
 
 `Table 1` contains a column called `strategy`.  As noted earlier, a "strategy" is a set of rules for choosing row operations to imrpove the diagonal of _H_. The strategies compared in `Table 1` are:
 
 - `Classic`: Swap rows to improve the diagonal of _H_ as recommended in the original PSLQ paper, until a zero-valued entry is swapped into the last diagonal element of H; terminate when that happens.
-- `IDASIF`: "Improve diagonal after solution is found". Use the `Classic` strategy until a zero is about to be swapped into the last diagonal entry of _H_. Then instead of swapping in that zero and terminating, use row operations to improve the last three columns of the table below, until there are no row operations left to perform that improve the diagonal. `IDASIF` is an early version of the as-yet untested "Swap, Reduce, Solve" strategy.
+- `IDASIF`: "Improve diagonal after solution is found". Use the `Classic` strategy until a zero is about to be swapped into the last diagonal entry of _H_. Then instead of swapping in that zero and terminating, use row operations to improve the last three columns of the table below, until there are no row operations left to perform that improve the diagonal. `IDASIF` is an early version of the as-yet untested "Swap, Reduce, Solve" strategy. See the section below, "The Swap, Reduce, Solve Strategy", for details about this strategy.
 
 It is understood that, just based on the description above, `IDASIF` is not a well-defined strategy. To learn the details, search `improveDiagonalWhenAboutToTerminate` in `strategy/strategyv1.go`.
 
@@ -186,31 +186,37 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
 
 ### The Swap, Reduce, Solve Strategy
 
-A new strategy, not yet implemented in this repository, is to slow down the Hermite reduction of _H_ to the point where its interior is just reduced enough to enable operations on adjacent rows, and is bounded by a small multiple of the diagonal elements. The latter condition just keeps the interior of _H_ from blowing up in absolute value, which would increase the required precision.
+An advanced version of "IDASIF" from the table above can be implemented using this repository. This strategy, called "Swap, Reduce, Solve" (SRS), has two phases. In both phases, the priority is to "swap" values of diagonal elements to make them increase towards the bottom right. When no further swaps can be made on adjacent rows that improve the diagonal of _H_, diagonal elements are reduced using a row operation involving the diagonal element and the last row of _H_. If this puts a zero in the last row of _H_, the column represents a solution of _<x,m>=0_: If _i_ is the lowest-numbered row with non-zero in a given column of _H_, column _i_ of _B_ is a solution of _<x,m>=0_.
 
-With Hermite reduction slowed down, the last row of _H_, row _n_, reduces to zero less quickly. As detailed below, this makes row _n_ available for reducing diagonal elements on the right side of _H_. This is what already happens in the last stages of the classical form of PSLQ from the original 1992 PSLQ paper, but only in the right-most column. Once the right-most column is fully reduced, putting a zero in _H<sub>n,n-1</sub>_, the same procedure that did that for column _n-1_ works for column _n-2_, then _n-3_, etc. This procedure only works in columns to the right of which row _n_ is zero. Though the zeroes do appear in row _n_ eventually, they only appear when it improves the diagonal of _H_.
+If it's not clear already from the above brief description, every opportunity to swap diagonal elements is seized, at the expense of reducing diagonal elements of _H_. And reducing diagonal elements of _H_ sometimes puts zeroes in the last row of _H_, making the column with the diagonal element a solution of _<x,m>=0_. The order of priority, therefore, is "swap, then "reduce and (maybe) solve".
+
+For now, we will focus on the first phase of SRS. Sub-section headings indicate which phase the section refers to. In phase 1, SRS slows down the Hermite reduction of _H_ to the point where its interior is just reduced enough to enable operations on adjacent rows, and does not blow up in absolute value. The first phase concludes with a solution of _<x,m>=0_ for each column of _H_. Phase 2 performs full Hermite reduction, as in the classic PSLQ algorithm. Phase 2 continues improving the diagonal by swapping both adjacent *and* non-adjacent rows. No reductions of diagonal elements, or new solutions, occur in phase 2.
+
+In phase 1, when there is no way to swap diagonal values, SRS (relucantly) reduces the bottom-right element of _H_'s diagonal with a row operation that combines the last two rows. This may free up diagonal swaps for a while, after which there follows a second reduction of the last diagonal element. At some point (with integer input at least), there comes a point where no further reductions *or* swaps are possible. This means that a solution has appeared in the bottom-right element of _H_.
+
+Once the right-most column is fully reduced, putting a zero in _H<sub>n,n-1</sub>_, the same procedure that did that for column _n-1_ works for column _n-2_, then _n-3_, etc. This procedure only works in columns to the right of which row _n_ is zero. Though the zeroes do appear in row _n_ eventually, they only appear when it improves the diagonal of _H_.
 
 The reason that reducing (the absolute value of) diagonal elements of _H_ makes progress is that it isolates _H<sub>n-1,n-1</sub>_ as an increasingly large diagonal element, compared to the others, which are being reduced. Remember, a corollary of lemma 10 in the [1999 paper analyzing PSLQ](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00995-3/S0025-5718-99-00995-3.pdf) is that the solution is optimal when _H<sub>n-1,n-1</sub>_ is the largest diagonal element.
 
 The technique for reducing |_H<sub>n-p,n-p</sub>_| involves a continued fraction approximation of _H<sub>n-p,n-p</sub>_ / _H<sub>n,n-p</sub>_ for _p=2,3,..._. It replaces _H<sub>n-p,n-p</sub>_ and _H<sub>n,n-p</sub>_ with errors from successive iterations of this approximation.  For example, if _H<sub>n-p,n-p</sub>=.5_ and _H<sub>n,n-p</sub>=.3_, a row operation would replace _H<sub>n-p,n-p</sub>_ by _.5-.3=.2_; and a second one would replace _H<sub>n,n-p</sub>_ with _.3-.2=.1_, etc. If these row operations terminate with a zero in _H<sub>n-p,n-p</sub>_, a row swap puts that zero in _H<sub>n,n-p</sub>_ and keeps _H<sub>n-p,n-p</sub>_ non-zero.
 
-#### How Much to Reduce?
+#### How Much to Reduce (Phase 1)?
 
 If and when _|H<sub>n-p,n-p</sub>|_ is small compared to its neighbor to the left, _|H<sub>n-p,n-p-1</sub>|_, the reduction can stop, because what makes a swap of rows _n-p-1_ and _n-p_ reduce the upper-left diagonal element, _|H<sub>n-p-1,n-p-1</sub>|_, is a small enough Euclidean length of the vector, (_H<sub>n-p,n-p-1</sub>_, _H<sub>n-p,n-p</sub>_). When to stop reducing is a parameter of the strategy that governs the choice of row operations. Later, we will specify the details of the "Swap, Reduce, Solve" strategy, which say to reduce down to near the precision of the numbers in _H_. But that is just one strategy, and others may be recommended that stop reducing well above the numerical precision.
 
-#### Iterating to the Left
+#### Iterating to the Left (Phase 1)
 
 If _H<sub>n,n-p</sub>_ starts off at zero, no reduction can occur in column _n-p_, but reduction can be attempted in column _n-p-1_. This is because the condition that makes the reductions of _H<sub>n-2,n-2</sub>_, _H<sub>n-3,n-3</sub>_ ... possible is that there are only zeroes to the right of these entries and their counterparts in row _n_ of the same column. These zeroes enable arbitrary integer row operations involving rows _n-p_ and _n_ for _p=2,3,..._ until for some _p_, a zero cannot be made to appear in _H<sub>n,n-p</sub>_. For that _p_, _|H<sub>n-p,n-p</sub>|_ is reduced but no reduction of the same kind is possible in columns to the left of column _p_.
 
 Once a zero appears in _H<sub>n,n-1</sub>_, it makes reduction work for _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_. The zero in _(xB)<sub>n-1</sub>_ assures that row operations can put a zero in _H<sub>n,n-2</sub>_ while reducing _H<sub>n-2,n-2</sub>_, provided _x_ contains only integers (more on this below). There is no guarantee that reducing _H<sub>n-3,n-3</sub>_ can put a zero in _H<sub>n,n-3</sub>_, but if it can, that zero makes reduction possible in column _n-4_, etc.
 
-#### Reduction Unsticks Row Swaps
+#### Reduction Unsticks Row Swaps (Phase 1)
 
 Let's pause here to note what happens to _H_ in large dimensions, like 50 and above. In spite of the best efforts to move large diagonal elements towards the bottom right using adjacent-row swaps, the largest diagonal elements end up in the upper left. Even small numbers in the sub-diagonal, one below the main diagonal -- typically a hundredth to a tenth the size of the main diagonal elements -- prevent swaps of larger diagonal elements from left to right. Diagonal improvement via standard row swaps comes to a halt.
 
 All this changes, once small numbers appear in the diagonal close to the right-hand side of _H_. Row swaps are unstuck, as they can readily move these small diagonal elements to the upper left. After that is done, new large diagonal elements appear in _H<sub>n-2,n-2</sub>_, _H<sub>n-3,n-3</sub>_ ... and the cycle of diagonal reduction and standard row-swaps repeats.
 
-#### A Zero in Row _n_ Generates a Solution
+#### A Zero in Row _n_ Generates a Solution (Phase 1)
 
 When a zero appears in _H<sub>n,n-1</sub>_, every entry of column _n-1_ of _H_ is zero except _H<sub>n-1,n-1</sub>_. This means that, since _xBH=0_, _(xBH)<sub>n-1</sub>=0_, and therefore _(xB)<sub>n-1</sub>=0_ -- making column _n-1_ of _B_ an integer-valued solution of _<x,m>=0_. All this has been stated above in the section "How PSLQ Works".
 
@@ -224,17 +230,14 @@ On the final step of PSLQ, _A_ is replaced by _DA_, _H_ by _DHN_ and _B_ by _BE_
 
 It is expected, but not proven here, that when PSLQ terminates this way, an analog of lemma 10 from the 1997 analysis of PSLQ extends to _|H<sub>n-p,n-p</sub>|_: the solution obtained by putting a zero in _H<sub>n,n-p</sub>_ has norm 1/|H<sub>n-p,n-p</sub>|; but in this case, that norm is distorted to the extent that _N_ is not a rotation. If so, it is important that _D_ be a full Hermite reduction of _H_ as described in the original 1992 PSLQ paper, making the interior of _H_ below the diagonal small so that _N_ can have small elements off its diagonal. That way, the actual norm of column _n-p_ of _B_ is as close as possible to _1/|H<sub>n-p,n-p</sub>|_.
 
-#### The Swap, Reduce, Solve Strategy
+#### The Swap, Reduce, Solve Strategy (Phase 1)
 
-It is now possible to state an entire strategy based on reducing diagonal elements of _H_: The "Swap, Reduce, Solve", or "SRS" strategy. This is not the only strategy one could think of that uses the continued fraction reduction technique described here. But there is little reason to stop at being able to reduce diagonal elements without fitting it into *some* strategy. As usual with this repository, there is no attempt to prove the performance of a strategy. Instead, empirical results will tell the story. That being said, the heuristics of this particular strategy seem compelling, and will be developed after the description of SRS.
+It is now possible to give the details of phase 1. These use "gentle Hermite reduction". The code in this repository supports two kinds of gentle Hermite reduction, along with full Hermite reduction as in the classic PSLQ algorithm:
 
-The reason for the name "Swap, Reduce, Solve", is that this strategy prioritizes swaps, then reduction, then solving. "Swaps" are row swaps (or, as seen in the section below, "General Row Operations", general row operations that are thought to be equivalent to swaps but faster when they are possible at all). "Reduce" refers, of course, to the reduction operation involving a diagonal element and row _n_. "Solve" refers to putting a zero in row _n_, which provides a new solution of _<x,m>=0_.
+- Reduce the first _n-1_ rows of H, but not the last row. In the code, this is indicated by the constant, `ReductionAllButLastRow`.
+- Do not reduce any rows, except in the sub-diagonal, and when doing so is necessary to keep the interior of _H_ from blowing up in absolute value. See `GetInt64D` for details. In the code, this is indicated by the constant, `ReductionGentle`, because this is the truly gentle way to perform Hermite reduction.
 
-Before giving details about the SRS strategy, the term "gentle Hermite reduction" needs to be defined. The original 1992 PSLQ paper defines Hermite reduction in the context of PSLQ as a technique that minimizes the entries below the diagonal of _H_ to the greatest extent possible. The SRS strategy depends on row _n_ being non-zero, so Hermite reduction in this sense is too harsh. Since every row is eventually combined with row _n_, no row should be Hermite reduced to the maximum extent.
-
-On the other hand, some reduction is needed to keep the interior of _H_ from growing without bound. "Gentle Hermite reduction" is this middle ground. Pick a small multiple of the diagonal elements, e.g. _2|H<sub>j,j</sub>|_, below which to maintain the absolute values below the diagonal in each column _j_. After a pair of rows are modified in the SRS strategy, reduce the non-diagonal elements of those rows below the chosen multiple of the diagonal elements above them. This applies to all but the sub-diagonal, _H<sub>2,1</sub>_, _H<sub>3,2</sub>_, ..., _H<sub>n-2,n-1</sub>_, which should always be reduced below half of the diagonal elements above them in absolute value. The sub-diagonal must be as small as possible to enable operations on adjacent rows to push large diagonal elements down and to the right.
-
-The SRS strategy runs in three modes, <b>Swap</b>, <b>Reduce</b> and <b>Solve</b>. Upon exiting <b>Solve</b> mode, a termination check is performed, but <b>Termination Check</b> is not considered a mode, because termination happens just once and it would mess up the name of this strategy. In the description below, "zero" refers to _0_ up to the precision of the numbers in _H_. The modes and transitions between them are as follows.
+During phase 1, the SRS strategy runs in three modes, <b>Swap</b>, <b>Reduce</b> and <b>Solve</b>. Upon exiting <b>Solve</b> mode, a termination check is performed, but <b>Termination Check</b> is not considered a mode, because termination happens just once and it would mess up the name of this strategy. In the description below, "zero" refers to _0_ up to the precision of the numbers in _H_. The modes and transitions between them are as follows.
 - <b>Swap</b>: Swap rows (or perform a general integer-valued, unit-determinant row operation) when doing so improves the diagonal of _H_. Improving the diagonal is defined as starting with _|H<sub>j,j</sub>| > |H<sub>j+1,j+1</sub>|_ for some _j_ with _1 &le; j < n-1_, performing a row operation and corner removal, and thereby reducing _|H<sub>j,j</sub>|_. The row operation to perform on each iteration is the one that reduces _|H<sub>j,j,</sub>|_ by the greatest factor over all choices of _j_ and all operations on rows _j_ and _j+1_. At the end of each iteration in <b>Swap</b> mode, perform gentle Hermite reduction on the modified rows.
 - <b>Reduce</b>: At some point, no swap or other row operation involving adjacent rows among rows _1_ through _n-1_ is left that improves the diagonal of _H_. Let _n-p_ be the number of the rightmost column for which _H<sub>n,n-p</sub>_ is not zero. Reduce _H<sub>n-p,n-p</sub>_ against _H<sub>p,n-p</sub>_ with continued fraction approximations, until one of the pair reaches a pre-determined, non-zero threshold and <b>Swap</b> mode can reduce _|H<sub>n-p-1,n-p-1</sub>|_; or one of the pair reaches zero. If  zero = _H<sub>n-p,n-p</sub>_, or zero < _|H<sub>n,n-p</sub>|_ < _|H<sub>n-p,n-p</sub>|_, swap rows _n-p_ and _n_ to keep the diagonal non-zero while minimizing it. Perform gentle Hermite reduction on rows _n-p_ and _n_.
 - <b>Solve</b>: If _H<sub>n-p,n-p</sub>_ or _H<sub>p,n-p</sub>_ reaches zero in the <b>Reduce</b> stage, a solution of _<x,m> = 0_ has become available, as described in the section, "A Zero in Row _n_ Generates a Solution". First, perform the <b>Termination Check</b> based on this new solution. Failing that, if the new value of _H<sub>n-p,n-p</sub>_ has enabled a row operation to reduce _|H<sub>n-p-1,n-p-1</sub>|_, use that fact to return to the <b>Swap</b> mode. Otherwise, proceed to <b>Reduce</b> mode using _H<sub>n-p-1,n-p-1</sub>_ and _H<sub>n,n-p-1</sub>_.
@@ -242,7 +245,7 @@ The SRS strategy runs in three modes, <b>Swap</b>, <b>Reduce</b> and <b>Solve</b
 
 Note that after <b>Solve</b> mode puts a zero in row _n_, <b>Swap</b> mode may overwrite it with corner removal. This happens if, in column _n-p_ with a zero in row _n_, the diagonal element _H<sub>n-p,n-p</sub>_ is small enough that <b>Swap</b> mode performs a row operation on rows _n-p-1_ and _n-p_, then removes the corner in _H<sub>n-p-1,n-p</sub>_. In the course of that corner removal, the zero in _H<sub>n,n-p</sub>_ is replaced by a non-zero.
 
-#### Heuristics Supporting the SRS Strategy
+#### Heuristics Supporting the SRS Strategy (Phase 1)
 
 The reason to delay the <b>Reduce</b> mode until no row operations are available to <b>Swap</b> mode is that when <b>Reduce</b> mode leads to <b>Solve</b> mode, zeroing out _H<sub>n,n-p</sub>_, the initial value of _|H<sub>n-p,n-p</sub>|_ should be as large as possible. Starting with a large _|H<sub>n-p,n-p</sub>|_ gives the greatest chance of ending with a large _|H<sub>n-p,n-p</sub>|_. Running in  <b>Swap</b> mode increases the diagonal elements in columns like _n-p_ with solutions, as they are on the right side of _H_ where <b>Swap</b> mode is putting large diagonal elements.
 
@@ -250,7 +253,7 @@ The reason to stop reducing _H<sub>n-p,n-p</sub>_ against _H<sub>n,n-p</sub>_ wh
 
 Waiting for the maximum diagonal element to appear in a solution column (i.e. one with a zero in row _n_) seems to offer the best chance of solving the shortest vector problem. But it is not a guarantee of solving it, because only column _n-1_ contains a diagonal element with the undistorted reciprocal of a solution norm.
 
-#### Proof that at Least Two Diagonal Elements Can Be Reduced
+#### Proof that at Least Two Diagonal Elements Can Be Reduced (Phase 1)
 
 As promised, here is an explanation of why both _H<sub>n-2,n-2</sub>_ and _H<sub>n-3,n-3</sub>_ can be reduced given integer-valued input _x_ and a non-zero _H<sub>n,n-2</sub>_ and _H<sub>n,n-3</sub>_. As mentioned above, this is because a zero appears in _H<sub>n,n-2</sub>_ when reducing |_H<sub>n-2,n-2</sub>_|. The key to why that zero appears is that
 
@@ -262,7 +265,7 @@ As promised, here is an explanation of why both _H<sub>n-2,n-2</sub>_ and _H<sub
 
 is an integer relation between _H<sub>n-2,n-2</sub>_ and _H<sub>n,n-2</sub>_. This guarantees that _H<sub>n-2,n-2</sub> / H<sub>n,n-2</sub>_ is rational. The row operations that mirror the continued fraction approximation of this ratio put an error of zero in _H<sub>n,n-2</sub>_ (or _H<sub>n-2,n-2</sub>_) on the last of finitely many steps. If the zero appears in _H<sub>n-2,n-2</sub>_, you would just swap rows _n-2_ and _n_ to put the zero in _H<sub>n,n-2</sub>_.
 
-#### General Row Operations
+#### General Row Operations (Phase 1)
 
 Since we are contemplating the placement of very small entries in the diagonal of _H_, it may take several rounds of row swaps, corner removals and reduction of sub-diagonal elements in the same 2x2 sub-matrix before this sub-matrix has its best ordering of diagonal elements. Consider, for example, the 2x2 sub-matrix
 _M<sub>k</sub>_ =
@@ -363,9 +366,20 @@ The last bullet puts us in a position to circle back to a claim above. The claim
 To take advantage of the foregoing analysis, a strategy, like SRS, that places very small elements in the diagonal of _H_ should save time using general row operations. After placing &epsilon;<sub>1</sub> in _H<sub>j+1,j+1</sub>_, the strategy would reduce _t=H<sub>j,j</sub>_ against _u=H<sub>j+1,j</sub>_, storing the reduced entry in _H<sub>j,j</sub>_ and the version of _R_ that puts it there at each stage.
  If the smallest absolute value of the stored _H<sub>j,j</sub>_ entries is smaller than sqrt(_u<sup>2</sup> + &epsilon;<sub>1</sub><sup>2</sup>_), the strategy would use the corresponding _R_ instead of a row swap in the next PSLQ iteration.
 
+#### Phase 2
+
+Phase 2 is, thankfully, much easier to explain than phase 1. As noted earlier, phase 2 begins when all columns of _H_ represent solutions of _<x,m>=0_, and no swapping of adjacent diagonal elements can improve the diagonal of _H_. In phase 2, any two rows _j<sub>0</sub> < j<sub>1</sub> < n_ for which the Euclidean length _L<sub>1</sub>_ of (_H<sub>j1,j0</sub>, H<sub>j1,j0+1</sub>, ... H<sub>j1,j1</sub>_) is less than _L<sub>0</sub> = |H<sub>j0,j0</sub>|_ can be swapped. After performing this swap and rotating to remove the non-zero elements to the right of _H<sub>j0,j0</sub>_, _|H<sub>j0,j0</sub>| = L<sub>1</sub>_ < L<sub>0</sub> = |H<sub>j1,j1</sub>|. This improves the diagonal of _H_ because
+
+- Before swapping: _|H<sub>j1,j1</sub>| &le; L<sub>1</sub> < L<sub>0</sub> = H<sub>j0,j0</sub>_. Diagonal elements _H<sub>j0,j0</sub>_ and _H<sub>j1,j1</sub>_ are out of order.
+- After swapping: _|H<sub>j1,j1</sub>| = L<sub>0</sub> > L<sub>1</sub> = H<sub>j0,j0</sub>_. Diagonal elements _H<sub>j0,j0</sub>_ and _H<sub>j1,j1</sub>_ are now in order.
+
+In phase 2, each possible pair, _(j<sub>0</sub>, j<sub>1</sub>)_, is ranked by how large _L<sub>0</sub>/L<sub>1</sub>_ is -- the larger the better. The pair with the largest _L<sub>0</sub>/L<sub>1</sub>_ is swapped. If no pair has _L<sub>0</sub>/L<sub>1</sub> > 1_, phase 2 and the entire algorithm terminates.
+
+Phase 2 works surprisingly well, albeit slowly. The reason it works well is the same reason it works slowly: There is no shortage of non-adjacent row swaps to perform, even though each requires not just one sub-diagonal element to be accounted for when computing _L<sub>1</sub>_, but _j<sub>1</sub> - j<sub>0</sub>_ of them.  The abundance of possible non-adjacent row swaps makes for slow, steady progress. The time it would take to terminate phase 2 may still be polynomial, as phase 1 probably is, but the polynomial would have a degree one higher than that of phase 1 because it operates on arbitrary pairs of rows, not single rows and their immediate successors.
+
 #### Final Thoughts on SRS
 
-Now that the SRS strategy has been defined, its development has begun. The next step in this journey is to finish development of the SRS strategy and see how close it comes to solving the smallest vector problem in dimensions like 100 or even 150. Up to now, only enumeration of possible solutions has solved the shortest vector problem in dimensions of this magnitude. See, for example, [The General Sieve Kernel and New Records in Lattice Reduction](https://eprint.iacr.org/2019/089.pdf).
+Initial experiments with SRS have shown that it finds solutions in higher degrees than "IDASIF". The building blocks of phase 1 can be found in the `BottomRightOfH` and `RowOpGenerator` in the code. Phase 2 uses `HPairStatistics`. Details on the performance of SRS, and actual code for SRS, can be obtained under a separate, individually negotiated, license.
 
 # The PSLQ Implementation in This Repository
 
@@ -397,15 +411,15 @@ This package includes
 - `New` for constructing a `pslqops.State`, which keeps track of the matrices `x`, `B`, `A` and `H`. `New` takes an array of strings representing the input to PSLQ in decimal form.
 - `pslqops.State.OneIteration`, the top-level function that performs one iteration of PSLQ.
 
-`OneIteration` takes as an argument a function, `getR`, that examines _H_ and returns `R`, a _2_ x _2_ sub-matrix that performs a row operation on _H_. In the classic PSLQ from the original 1992 PSLQ paper, the _2_ x _2_ matrix swaps adjacent rows _j_ and _j+1_ for which a certain quantity is maximized (see `pslqops.GetRClassic` or the original 1992 PSLQ paper). Other rules for choosing `R` are implemented in the `strategy` package. One of these strategies is what `Table 1` shows results for in rows labeled `IDASIF`.
+`OneIteration` takes as an argument a function, `getR`, that examines _H_ and returns `R`, a row operation that performs a row operation on _H_. In the classic PSLQ from the original 1992 PSLQ paper, _R_ is a swap of adjacent rows _j_ and _j+1_ for which a certain quantity is maximized (see `pslqops.GetRClassic` or the original 1992 PSLQ paper). Other rules for choosing `R` are implemented in the `strategy` package. One of these strategies is what `Table 1` shows results for in rows labeled `IDASIF`.
 
-A point of confusion could be that `getR` does not return anything called "R". It returns two lists of integers saying what rows to operate on and what matrix to apply. That's OK, it's still an `R` matrix -- in the sense that the original 1992 PSLQ paper uses that notation -- in the form that `OneIteration` accepts.
+A point of confusion could be that `getR` does not return anything called "R". It returns a `RowOperation` type saying what rows to operate on and what matrix, or permutation, to apply. That's OK, it's still an `R` matrix -- in the sense that the original 1992 PSLQ paper uses that notation -- in the form that `OneIteration` accepts.
 
-PSLQ maintains invariants like equation 2, _xBH_ = 0, which you can verify with `GetObservedRoundOffError`. Another invariant verifier is `CheckInvariants`, which verifies that _B_ = _A<sup>-1</sup>_.
+PSLQ maintains invariants like equation 2, _xBH_ = 0, which you can verify with `GetObservedRoundOffError`. Another invariant verifier is `CheckInvariants`, which verifies that _B_ = _A<sup>-1</sup>_ and that the upper right of _H_ contains zeroes, up to round-off error.
 
 ## The strategy Package
 
-The `strategy` package is where all the fun ideas for improving the empirical performance of PSLQ are defined. These are the functions passed to `pslqopa.OneIteration` as parameter `getR`.  This package is in flux as new ideas are tried. In order to avoid making `Table 1` out of date, only the `IDASIF` strategy (constant `improveDiagonalWhenAboutToTerminate` in `strategy.go`) will necessarily be retained as-is.
+The `strategy` package is where all the fun ideas for improving the empirical performance of PSLQ are defined. These are the functions passed to `pslqopa.OneIteration` as parameter `getR`.  This package is in flux as new ideas are tried. In order to avoid making `Table 1` out of date, only the `IDASIF` strategy (constant `improveDiagonalWhenAboutToTerminate` in `strategyv1.go`) will necessarily be retained as-is.
 
 ## Variable Names
 
