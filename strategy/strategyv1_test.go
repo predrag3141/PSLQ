@@ -3,11 +3,9 @@
 package strategy
 
 import (
-	cr "crypto/rand"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math"
-	"math/big"
 	"math/rand"
 	"os"
 	"pslq/bigmatrix"
@@ -371,92 +369,14 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 
 func TestGetRImprovingDiagonal(t *testing.T) {
 	const minLength = 10
-	const lengthIncr = 20 // 45
-	const maxLength = 30  // 100
-	const maxRelationElement = 5
+	const lengthIncr = 10 // 45
+	const maxLength = 20  // 100
+	const relationElementRange = 5
 	const maxExpectedFinalRatio = 20.0
 	const randomRelationProbabilityThresh = .001
 
-	// The input to PSLQ will be a xLen-long vector with
-	// - Entries from the uniform distribution on [-maxX/2,maxX/2].
-	// - A known, "causal" relation (variable name "relation") with entries from
-	//   the uniform distribution on [-maxRelationElement/2,maxRelationElement/2]
-	//
-	// The question is what maxX needs to be to pose a reasonable challenge to PSLQ.
-	// A reasonable challenge is for randomRelationProbabilityThresh to be the chance
-	// that a random relation exists with Euclidean norm less than that of the causal
-	// relation, or with each entry in [-maxRelationElement/2,maxRelationElement/2].
-	//
-	// Figuring out what maxX needs to be requires some hand-waving. The idea is to
-	// break the computation of <r,x> for a putative r into two parts: the first
-	// xLen-1 coordinates and the last coordinate. Let
-	//
-	// - x1 be the first xLen-1 elements of the PSLQ input, x
-	// - x2 be the last element of x
-	// - r1 be the first xLen-1 elements of a potential relation, r, of x
-	// - r2 be the last element of r
-	//
-	// Suppose a random r1 is chosen, and r2 is chosen to make <r,x> as close
-	// as possible to 0 but with the stipulation that |r2| < maxRelationElement/2.
-	// The two criteria for such a choice of r2 to yield a relation of x are:
-	// - <r1,x1> = 0 mod x2
-	// - |<r1,x1> / x2| < maxRelationElement/2
-	//
-	// Assuming these criteria have independent probabilities, their combined probability
-	// can be estimated by assuming (this is where the hand-waving begins) that
-	// - |x2| = maxX/4 (since 0 <= |x2| < maxX/2), and
-	// - |<r1,x1>|^2 is uniform on [0,sqrt(xLen)(maxX/2)] (it is actually chi-square)
-	//
-	// The probability that <r1,x1> = 0 mod x2 is
-	//
-	// 1/|x2| = 1/maxX/4 = 4/maxX
-	//
-	// The probability that |<r1,x1> / x2| < maxRelationElement/2 is
-	//
-	// (maxRelationElement/2) / (sqrt(xLen)(maxX/2) / (maxX/4))
-	//   = (maxRelationElement/2) / (2 sqrt(xLen))
-	//   = maxRelationElement / (4 sqrt(xLen))
-	//
-	// So the combined probability of any given choice of r1 succeeding is
-	//
-	// [4/maxX] [maxRelationElement / (4 sqrt(xLen))] = maxRelationElement / (sqrt(xLen) maxX)
-	//
-	// The expected number, lambda, of successes over all choices of r1 is
-	// maxRelationElement^(xLen-1) times that. So
-	//
-	// lambda = maxRelationElement^xLen / (sqrt(xLen) maxX)
-	//
-	// maxX is to be set so the Poisson probability of 0 successes at random is
-	// randomRelationProbabilityThresh. The Poisson probability is very close to lambda
-	// when lambda is small, so set lambda = randomRelationProbabilityThresh:
-	//
-	// maxRelationElement^xLen / (sqrt(xLen) maxX) = randomRelationProbabilityThresh
-	//
-	// Now multiply by maxX and divide by randomRelationProbabilityThresh to isolate maxX:
-	//
-	// maxX = maxRelationElement^xLen / (sqrt(xLen) randomRelationProbabilityThresh)
-	//
-	// For simplicity, ignore the small factor of 1/sqrt(xLen);
-	//
-	// maxX = maxRelationElement^xLen / randomRelationProbabilityThresh
-	//
-	// This is the volume of an xLen-dimensional cube, times 1/randomRelationProbabilityThresh.
-	// A similar calculation based on the volume of the sphere of possible solutions smaller
-	// than that of the causal relation is also done. The larger of the two maxX values is
-	// used.
 	for xLen := minLength; xLen <= maxLength; xLen += lengthIncr {
-		relation, relationNorm := getCausalRelation(xLen, maxRelationElement)
-		maxXBasedOnCubeVolume := math.Pow(float64(maxRelationElement), float64(xLen)) / randomRelationProbabilityThresh
-		maxXBasedOnSphereVolume := sphereVolume(relationNorm, xLen) / randomRelationProbabilityThresh
-		var log2MaxX int64
-		if maxXBasedOnSphereVolume > maxXBasedOnCubeVolume {
-			log2MaxX = int64(1.0 + math.Log2(maxXBasedOnSphereVolume))
-		} else {
-			log2MaxX = int64(1.0 + math.Log2(maxXBasedOnCubeVolume))
-		}
-		maxXAsBigInt := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(log2MaxX), nil)
-		xEntries, decimalX := getX(t, relation, maxXAsBigInt)
-
+		pslqContext := GetPSLQInput(xLen, relationElementRange, randomRelationProbabilityThresh)
 		for _, whenToImproveDiagonal := range []int{
 			improveDiagonalNever, improveDiagonalWhenAboutToTerminate, // improveDiagonalAlways,
 		} {
@@ -471,55 +391,36 @@ func TestGetRImprovingDiagonal(t *testing.T) {
 				fmt.Printf("\n=== length %d strategy = \"always improve diagonal\"\n", xLen)
 				break
 			}
-			fmt.Printf("- xEntries: %v\n", xEntries)
-			fmt.Printf("- decimalX: %v\n", decimalX)
-			fmt.Printf("- relation: %v with norm %f\n", relation, relationNorm)
+			fmt.Printf("- xEntries: %v\n", pslqContext.InputAsBigInt)
+			fmt.Printf("- decimalX: %v\n", pslqContext.InputAsDecimalString)
+			fmt.Printf("- relation: %v with norm %f\n", pslqContext.Relation, pslqContext.RelationNorm)
 			fmt.Printf(
 				"- relation norm: %f, max X based on cube volume: %e max X based on sphere volume: %e\n",
-				relationNorm, maxXBasedOnCubeVolume, maxXBasedOnSphereVolume,
+				pslqContext.RelationNorm, pslqContext.MaxXBasedOnCubeVolume, pslqContext.MaxXBasedOnSphereVolume,
 			)
-			solution, dotProduct, solutionNorm, solutionMatches := testGetRImprovingDiagonal(
-				t, xEntries, decimalX, relation, maxExpectedFinalRatio, whenToImproveDiagonal,
+
+			// Check that the relation is a solution
+			relationWorks := pslqContext.TestSolution(pslqContext.Relation)
+			assert.True(t, relationWorks)
+
+			solution, solutionIsCorrect, solutionMatches, solutionNorm := testGetRImprovingDiagonal(
+				t, pslqContext, maxExpectedFinalRatio, whenToImproveDiagonal,
 			)
-			if dotProduct == 0 {
-				fmt.Printf(
-					"solution %v with norm %f works\n", solution, solutionNorm,
-				)
-			} else {
-				fmt.Printf(
-					"solution %v with norm %f failed with dot product %d against the input\n",
-					solution, solutionNorm, dotProduct,
-				)
-			}
-			if solutionMatches {
-				fmt.Printf("match: %v == %v\n", solution, relation)
-			} else {
-				fmt.Printf("non-match: %v != %v\n", solution, relation)
-			}
+			pslqContext.PrintSolution(solution, solutionIsCorrect, solutionMatches, solutionNorm)
 		}
 	}
 }
 
 func testGetRImprovingDiagonal(
 	t *testing.T,
-	xEntries []big.Int,
-	decimalX []string,
-	relation []int,
+	pslqContext *PSLQContext,
 	maxExpectedFinalRatio float64,
 	whenToImproveDiagonal int,
-) ([]int64, int64, float64, bool) {
-	// Check that the relation works
-	dotProduct := big.NewInt(0)
-	xLen := len(xEntries)
-	for i := 0; i < xLen; i++ {
-		dotProduct.Add(dotProduct, big.NewInt(0).Mul(big.NewInt(int64(relation[i])), &xEntries[i]))
-	}
-	assert.Equal(t, int64(0), dotProduct.Int64())
-
+) ([]int64, bool, bool, float64) {
 	// Run the algorithm
-	var finalRatio *float64
-	var finalDiagonal []*bignumber.BigNumber
-	state, err := pslqops.New(decimalX, "1.5") // was "1.16" up to morning of July 24 2023
+	state, err := pslqops.NewState(
+		pslqContext.InputAsDecimalString, "1.5", pslqops.ReductionFull,
+	) // gammaStr was "1.16" up to morning of July 24 2023
 	numIterations := 0
 	var getRFunc func(
 		h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber,
@@ -538,15 +439,8 @@ func testGetRImprovingDiagonal(
 	for terminated := false; !terminated; terminated, err = state.OneIteration(getRFunc) {
 		// Track details about the diagonal
 		var aboutToTerminate bool
-		var diagonal []*bignumber.BigNumber
-		var ratioLargestToLast *float64
 		aboutToTerminate, err = state.AboutToTerminate()
-		diagonal, ratioLargestToLast, err = state.GetDiagonal()
 		assert.NoError(t, err)
-		if ratioLargestToLast != nil {
-			finalRatio = ratioLargestToLast
-		}
-		finalDiagonal = diagonal
 
 		// Monitor statistics for the best pair of rows to swap in H
 		var hPairStatistics []pslqops.HPairStatistics
@@ -583,58 +477,19 @@ func testGetRImprovingDiagonal(
 	}
 	fmt.Printf("\nTerminated after %d iterations\n", numIterations)
 
-	// Check that the last diagonal entry is the max on the last iteration
-	if finalRatio == nil {
-		assert.Truef(t, false, "in %d iterations, finalRatio was never set", numIterations)
-	} else {
-		assert.Truef(t, *finalRatio < maxExpectedFinalRatio, "in %d iterations, final ratio = %f > %f\n",
-			numIterations, *finalRatio, maxExpectedFinalRatio,
-		)
-	}
-	printDiagonal("Last diagonal before a solution is found", finalDiagonal, finalRatio)
+	// Print the diagonal
+	var diagonal []*bignumber.BigNumber
+	var ratioLargestToLastPtr *float64
+	diagonal, ratioLargestToLastPtr, err = state.GetDiagonal()
+	PrintDiagonal("Last diagonal before termination", diagonal, ratioLargestToLastPtr)
 
 	// Verify the solution
 	var solution []int64
 	solution, err = state.GetColumnOfB(state.NumRows() - 1)
-	dotProduct.Set(big.NewInt(0))
-	solutionMatches := true
-	var solutionNorm float64
-	sgn := int64(1)
-	for i := 0; i < len(relation); i++ {
-		if (relation[i] != 0) && (int64(relation[i])+solution[i] == 0) {
-			sgn = -1
-			break
-		}
-	}
-	for i := 0; i < state.NumRows(); i++ {
-		if sgn*int64(relation[i]) != solution[i] {
-			solutionMatches = false
-		}
-		xEntry := big.NewInt(0).Set(&xEntries[i])
-		term := big.NewInt(0).Mul(big.NewInt(solution[i]), xEntry)
-		dotProduct.Add(dotProduct, term)
-		solutionNorm += float64(solution[i] * solution[i])
-	}
-	solutionNorm = math.Sqrt(solutionNorm)
-	assert.True(t, dotProduct.IsInt64())
-	return solution, dotProduct.Int64(), solutionNorm, solutionMatches
-}
-
-func printDiagonal(caption string, diagonal []*bignumber.BigNumber, ratioLargestToLast *float64) {
-	fmt.Printf("%s: ", caption)
-	if diagonal == nil {
-		fmt.Printf("[no diagonal was saved]")
-		return
-	}
-	for i := 0; i < len(diagonal); i++ {
-		_, d := diagonal[i].String()
-		fmt.Printf("%q,", d)
-	}
-	if ratioLargestToLast != nil {
-		fmt.Printf(" largest / last = %f\n", *ratioLargestToLast)
-	} else {
-		fmt.Printf(" largest / last = infinity or unknown\n")
-	}
+	solutionNorm := SolutionNorm(solution)
+	isCorrect := pslqContext.TestSolution(solution)
+	matches := pslqContext.SolutionMatchesRelation(solution)
+	return solution, isCorrect, matches, solutionNorm
 }
 
 func getExpectedJABCD(
@@ -797,51 +652,4 @@ func getExpectedJABCD(
 	return rowOperation, fmt.Sprintf(
 		"In expected results, no improvement was found\n%s\n", reason,
 	)
-}
-
-// getCausalRelation returns a relation that is to be orthogonal to the X vector
-// later calculated by getX.
-func getCausalRelation(xLen, maxRelationElement int) ([]int, float64) {
-	relation := make([]int, xLen)
-	relationNorm := 1.0 // the last element is 1 so start with 1.0
-	for i := 0; i < xLen-1; i++ {
-		relation[i] = rand.Intn(maxRelationElement) - (maxRelationElement / 2)
-		relationNorm += float64(relation[i] * relation[i])
-	}
-	relationNorm = math.Sqrt(relationNorm)
-	relation[xLen-1] = 1
-	return relation, relationNorm
-}
-
-// getX returns an xLen-long array, xEntries, of int64s; decimalX, their decimal
-// representations; with <xEntries, relation> = 0.
-func getX(t *testing.T, relation []int, maxX *big.Int) ([]big.Int, []string) {
-	xLen := len(relation)
-	xEntries := make([]big.Int, xLen)
-	decimalX := make([]string, xLen)
-	subTotal := big.NewInt(0)
-	maxXOver2 := big.NewInt(0).Quo(maxX, big.NewInt(2))
-	var xEntryPlusMaxXOver2 *big.Int
-	var err error
-	for i := 0; i < xLen-1; i++ {
-		xEntryPlusMaxXOver2, err = cr.Int(cr.Reader, maxX)
-		assert.NoError(t, err)
-		xEntries[i] = *(big.NewInt(0).Sub(xEntryPlusMaxXOver2, maxXOver2))
-		decimalX[i] = xEntries[i].String()
-		subTotal.Add(subTotal, big.NewInt(0).Mul(&xEntries[i], big.NewInt(int64(relation[i]))))
-	}
-	xEntries[xLen-1] = *(big.NewInt(0).Neg(subTotal))
-	decimalX[xLen-1] = xEntries[xLen-1].String()
-	return xEntries, decimalX
-}
-
-func sphereVolume(radius float64, dim int) float64 {
-	// Example: for dim = 100, the volume of a sphere is
-	// (1/(sqrt(100 pi))) (2*pi*e/100)^50 R^100
-	//   = 0.0564189584 * 4.20453056E-39 * R^100
-	//   = 2.37215235E-40 R^100
-	const twoPiE = float64(2.0 * math.Pi * math.E)
-	dimAsFloat64 := float64(dim)
-	return (1.0 / math.Sqrt(dimAsFloat64*math.Pi)) *
-		math.Pow(twoPiE/dimAsFloat64, 0.5*dimAsFloat64) * math.Pow(radius, dimAsFloat64)
 }

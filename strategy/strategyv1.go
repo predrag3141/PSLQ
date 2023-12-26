@@ -24,8 +24,6 @@ const (
 	minFloat = 1.e-100
 )
 
-// TODO implement GetDiagonalReduction
-
 // Given relatively prime integers a, b, there is a unique row operation
 //      _       _
 // J = |  a   b  |

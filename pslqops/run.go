@@ -8,38 +8,45 @@ import (
 	"math"
 	"pslq/bigmatrix"
 	"pslq/bignumber"
-	"pslq/util"
 	"sort"
 )
 
-// Round-off is a concern in the PSLQ algorithm, so it is tracked with a
-// rudimentary infinite impulse response filter. The input to this filter
-// is the observed error in the calculation of an invariant of PSLQ. The
-// filtered, observed round-off error is updated to
-//
-// 0.95 s.observedRoundOffError + 0.05 currentRoundOffError
-//
-// As the above formula indicates, the weight given the current round-off
-// error is 0.05. This is controlled by:
-const roundOffCurrentWeight = "0.05"
+const (
+	// Round-off is a concern in the PSLQ algorithm, so it is tracked with a
+	// rudimentary infinite impulse response filter. The input to this filter
+	// is the observed error in the calculation of an invariant of PSLQ. The
+	// filtered, observed round-off error is updated to
+	//
+	// 0.95 s.observedRoundOffError + 0.05 currentRoundOffError
+	//
+	// As the above formula indicates, the weight given the current round-off
+	// error is 0.05. This is controlled by:
+	roundOffCurrentWeight     = "0.05"
+	gentleReductionModeThresh = 10000 // D matrix entry value above which to override gentle reduction mode
+	ReductionFull             = iota
+	ReductionAllButLastRow
+	ReductionGentle
+)
 
 // State holds the state of a running PSLQ algorithm
 type State struct {
-	useBigNumber          bool // whether the client should switch to using BigNumberState
-	rawX                  *bigmatrix.BigMatrix
-	sortedToUnsorted      []int
-	updatedRawX           *bigmatrix.BigMatrix
-	h                     *bigmatrix.BigMatrix
-	aInt64Matrix          []int64
-	bInt64Matrix          []int64
-	aBigNumberMatrix      *bigmatrix.BigMatrix
-	bBigNumberMatrix      *bigmatrix.BigMatrix
-	numRows               int
-	numCols               int
-	powersOfGamma         []*bignumber.BigNumber
-	observedRoundOffError *bignumber.BigNumber
-	roundOffCurrentWeight *bignumber.BigNumber
-	roundOffHistoryWeight *bignumber.BigNumber
+	useBigNumber                  bool // whether the client should switch to using BigNumberState
+	rawX                          *bigmatrix.BigMatrix
+	sortedToUnsorted              []int
+	updatedRawX                   *bigmatrix.BigMatrix
+	h                             *bigmatrix.BigMatrix
+	aInt64Matrix                  []int64
+	bInt64Matrix                  []int64
+	aBigNumberMatrix              *bigmatrix.BigMatrix
+	bBigNumberMatrix              *bigmatrix.BigMatrix
+	numRows                       int
+	numCols                       int
+	powersOfGamma                 []*bignumber.BigNumber
+	observedRoundOffError         *bignumber.BigNumber
+	roundOffCurrentWeight         *bignumber.BigNumber
+	roundOffHistoryWeight         *bignumber.BigNumber
+	reductionMode                 int
+	consecutiveIdentityReductions int
 }
 
 // inputSort is a mechanism for sorting the input
@@ -55,8 +62,8 @@ func (bav ByAbsValue) Len() int           { return len(bav) }
 func (bav ByAbsValue) Swap(i, j int)      { bav[i], bav[j] = bav[j], bav[i] }
 func (bav ByAbsValue) Less(i, j int) bool { return bav[i].absValue.Cmp(bav[j].absValue) < 0 }
 
-// New returns a new State from a provided decimal string array
-func New(input []string, gammaStr string) (*State, error) {
+// NewState returns a new State from a provided decimal string array
+func NewState(input []string, gammaStr string, reductionMode int) (*State, error) {
 	// retVal is uninitialized
 	rawX, err := GetRawX(input)
 	if err != nil {
@@ -77,6 +84,7 @@ func New(input []string, gammaStr string) (*State, error) {
 		powersOfGamma:         nil,
 		observedRoundOffError: bignumber.NewFromInt64(0),
 		roundOffCurrentWeight: nil,
+		reductionMode:         reductionMode,
 	}
 
 	// sortedRawX, updatedRawX and sortedToUnsorted need to be initialized
@@ -171,7 +179,12 @@ func (s *State) OneIteration(
 	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) (*RowOperation, error),
 ) (bool, error) {
 	// Step 1 of this PSLQ iteration
-	dMatrix, dHasLargeEntry, err := GetInt64D(s.h)
+	dMatrix, dHasLargeEntry, isIdentity, err := GetInt64D(s.h, s.reductionMode)
+	if isIdentity {
+		s.consecutiveIdentityReductions++
+	} else {
+		s.consecutiveIdentityReductions = 0
+	}
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not compute D from H: %q", err.Error())
 	}
@@ -192,13 +205,12 @@ func (s *State) OneIteration(
 	// Step 2 of this PSLQ iteration
 	var rowOperation *RowOperation
 	rowOperation, err = getR(s.h, s.powersOfGamma)
-	err = rowOperation.ValidateAll(s.numRows, s.numCols, "PerformRowOp")
-	if err != nil {
-		return false, err
-	}
-
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not get R: %q", err.Error())
+	}
+	err = rowOperation.ValidateAll(s.numRows, "PerformRowOp")
+	if err != nil {
+		return false, err
 	}
 
 	// Step 3 of this PSLQ iteration
@@ -214,8 +226,40 @@ func (s *State) OneIteration(
 			"OneIteration: could not update round-off error: %q", err.Error(),
 		)
 	}
-	// fmt.Printf("H after an iteration: %v\n", s.h) // debug
 	return s.HasTerminated()
+}
+
+func (s *State) SetReductionMode(newMode int) error {
+	switch newMode {
+	case ReductionAllButLastRow, ReductionGentle, ReductionFull:
+		s.reductionMode = newMode
+		break
+	default:
+		return fmt.Errorf("SetReductionMode: newMode = %d is invalid", newMode)
+	}
+	return nil
+}
+
+// IsInFullReductionMode returns whether the current reduction mode is full reduction.
+func (s *State) IsInFullReductionMode() bool {
+	return s.reductionMode == ReductionFull
+}
+
+// IsInGentleReductionMode returns whether the current reduction mode is gentle reduction.
+func (s *State) IsInGentleReductionMode() bool {
+	return s.reductionMode == ReductionGentle
+}
+
+// IsInAllButLastRowReductionMode returns whether the current reduction mode is all-but-last-row
+// reduction.
+func (s *State) IsInAllButLastRowReductionMode() bool {
+	return s.reductionMode == ReductionAllButLastRow
+}
+
+// ConsecutiveIdentityReductions returns the number of consecutive iterations for which matrix D
+// is the identity. When this is large, the algorithm has no recent progress.
+func (s *State) ConsecutiveIdentityReductions() int {
+	return s.consecutiveIdentityReductions
 }
 
 func (s *State) GetObservedRoundOffError() *bignumber.BigNumber {
@@ -247,6 +291,15 @@ func (s *State) GetDiagonal() ([]*bignumber.BigNumber, *float64, error) {
 		retValI, err = s.h.Get(i, i)
 		if err != nil {
 			return nil, nil, fmt.Errorf("GetDiagonal: could not get H[%d][%d]: %q", i, i, err.Error())
+		}
+		if (i == s.numCols-1) && (retValI.IsSmall()) {
+			// The last diagonal element was evidently swapped into the last row, so get it from there.
+			retValI, err = s.h.Get(s.numRows-1, s.numCols-1)
+			if err != nil {
+				return nil, nil, fmt.Errorf(
+					"GetDiagonal: could not get H[%d][%d]: %q", s.numRows-1, s.numCols-1, err.Error(),
+				)
+			}
 		}
 		retVal[i] = bignumber.NewFromInt64(0).Set(retValI)
 		absRetVal := bignumber.NewFromInt64(0).Abs(retValI)
@@ -324,13 +377,55 @@ func (s *State) NumRows() int {
 	return s.numRows
 }
 
+func (s *State) NewRowOpGenerator() *RowOpGenerator {
+	return NewRowOpGenerator(s.h)
+}
+
+// GetBottomRightOfH returns t, u, v, w in the bottom-right of H for which zeroes appear
+// as shown below, along with the row number in which u appears; or if zeroes in this
+// pattern do not exist, GetBottomRightOfH returns the bottom-right 3x2 sub-matrix of H,
+// which has the same form as the first two columns shown below. In the latter case, the
+// row number returned is numRows-3, because t appears in that row.
+//
+//	_             _
+//
+// |  t  0  0 ...  |
+// |  u  v  0 ...  |
+// |  ...          |
+// |_ *  w  0 ... _|
+//
+// A strategy can use such t, u, v, w, and row number to define a row operation that reduces
+// w just enough to swap the largest diagonal element down and to the right in the 2x2 sub-
+// matrix whose upper-left element is t.
+func (s *State) GetBottomRightOfH() (*BottomRightOfH, error) {
+	return GetBottomRightOfH(s.h)
+}
+
+// GetHPairStatistics returns an array, hp, of HPairStatistics and the index i into hp
+// of the best-scoring element of hp. If there are no row swaps that would improve the
+// diagonal of H, the returned index is -1. A strategy could be to swap rows hp[i].j0
+// and hp[i].j1.
 func (s *State) GetHPairStatistics() ([]HPairStatistics, int, error) {
 	return getHPairStatistics(s.h)
 }
 
 func (s *State) CheckInvariants() error {
+	for i := 0; i < s.numRows; i++ {
+		for j := i + 1; j < s.numCols; j++ {
+			hij, err := s.h.Get(i, j)
+			if err != nil {
+				return fmt.Errorf("CheckInvariants: could not get H[%d][%d]: %q", i, j, err.Error())
+			}
+			if !hij.IsSmall() {
+				_, hijAsStr := hij.String()
+				return fmt.Errorf("CheckInvariants: H[%d][%d] = %q is not small", i, j, hijAsStr)
+			}
+		}
+	}
+	var ab *bigmatrix.BigMatrix
+	var err error
 	if s.useBigNumber {
-		ab, err := bigmatrix.NewEmpty(s.numRows, s.numRows).Mul(
+		ab, err = bigmatrix.NewEmpty(s.numRows, s.numRows).Mul(
 			s.aBigNumberMatrix, s.bBigNumberMatrix,
 		)
 		if err != nil {
@@ -339,48 +434,46 @@ func (s *State) CheckInvariants() error {
 				s.aInt64Matrix, s.bInt64Matrix, err.Error(),
 			)
 		}
-		for i := 0; i < s.numRows; i++ {
-			for j := 0; j < s.numRows; j++ {
-				expected := int64(0)
-				if i == j {
-					expected = 1
-				}
-				var abIJ *bignumber.BigNumber
-				abIJ, err = ab.Get(i, j)
-				if err != nil {
-					return fmt.Errorf(
-						"CheckInvariants: could not get AB[%d][%d]: %q", i, j, err.Error(),
-					)
-				}
-				if abIJ.Cmp(bignumber.NewFromInt64(expected)) != 0 {
-					_, abIJAsString := abIJ.String()
-					return fmt.Errorf(
-						"CheckInvariants: AB[%d][%d] = %q != %d",
-						i, j, abIJAsString, expected,
-					)
-				}
-			}
-		}
 	} else {
-		ab, err := util.MultiplyIntInt(s.aInt64Matrix, s.bInt64Matrix, s.numRows)
+		// Though A and B may contain small enough entries to fit in int64, intermediate values
+		// in their product will not, in general. Convert A and B to BigNumber, then multiply.
+		aBigNumberMatrix, err := bigmatrix.NewFromInt64Array(s.aInt64Matrix, s.numRows, s.numRows)
+		if err != nil {
+			return fmt.Errorf("CheckInvariants: could not create BigNumber matrix A: %q", err.Error())
+		}
+		bBigNumberMatrix, err := bigmatrix.NewFromInt64Array(s.bInt64Matrix, s.numRows, s.numRows)
+		if err != nil {
+			return fmt.Errorf("CheckInvariants: could not create BigNumber matrix B: %q", err.Error())
+		}
+		ab, err = bigmatrix.NewEmpty(s.numRows, s.numRows).Mul(aBigNumberMatrix, bBigNumberMatrix)
 		if err != nil {
 			return fmt.Errorf(
 				"CheckInvariants: could not multiply %v by %v: %q",
 				s.aInt64Matrix, s.bInt64Matrix, err.Error(),
 			)
 		}
-		for i := 0; i < s.numRows; i++ {
-			for j := 0; j < s.numRows; j++ {
-				expected := int64(0)
-				if i == j {
-					expected = 1
-				}
-				if ab[i*s.numRows+j] != expected {
-					return fmt.Errorf(
-						"CheckInvariants: AB[%d][%d] = %d != %d",
-						i, j, ab[i*s.numRows+j], expected,
-					)
-				}
+	}
+
+	// Test whether ab is the identity.
+	for i := 0; i < s.numRows; i++ {
+		for j := 0; j < s.numRows; j++ {
+			expected := int64(0)
+			if i == j {
+				expected = 1
+			}
+			var abIJ *bignumber.BigNumber
+			abIJ, err = ab.Get(i, j)
+			if err != nil {
+				return fmt.Errorf(
+					"CheckInvariants: could not get AB[%d][%d]: %q", i, j, err.Error(),
+				)
+			}
+			if abIJ.Cmp(bignumber.NewFromInt64(expected)) != 0 {
+				_, abIJAsString := abIJ.String()
+				return fmt.Errorf(
+					"CheckInvariants: AB[%d][%d] = %q != %d\nA = %v\nB = %v. using big numbers: %v",
+					i, j, abIJAsString, expected, s.aInt64Matrix, s.bInt64Matrix, s.IsUsingBigNumber(),
+				)
 			}
 		}
 	}
@@ -397,6 +490,7 @@ func (s *State) HasTerminated() (bool, error) {
 	}
 	return lastDiagonalElement.IsSmall(), nil
 }
+
 func (s *State) IsUsingBigNumber() bool {
 	return s.useBigNumber
 }

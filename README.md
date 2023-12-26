@@ -26,7 +26,7 @@ Rather than run down all the details of the transformation of the LWE problem in
 
 Without some changes, PSLQ is not a useful tool for cryptanalysis. PSLQ is designed to handle non-integer, real input. Given integer input, PSLQ as defined in the original 1992 paper quickly finds a bad (high-norm) solution, _m_, and terminates.
 
-Read on to see in detail how this problem can be fixed. For now, let it suffice to say that PSLQ as originally defined is both a framework and a strategy. The framework consists of a matrix equation and a set of allowed operations on this equation that change its components until a solution of _<x,m> = 0_ is found.
+Read on to see in detail how this problem can be fixed. For now, let it suffice to say that the modification of PSLQ proposed here delays the termination of the algorithm until the solution is optimal.  PSLQ, as originally defined, is both a framework and a strategy. The framework consists of a matrix equation and a set of allowed operations on this equation that change its components until a solution of _<x,m> = 0_ is found. The framework cannot change; the strategy can. In this case, the strategy is modified to delay termination and optimize the solution.
 
 The strategy specifies what operations to perform, and when to perform them. The framework cannot change, because it is what guarantees some invariants needed to solve _<x,m> = 0_. The strategy most certainly can be modified, and has been in papers like [this](https://community.ams.org/journals/mcom/2001-70-236/S0025-5718-00-01278-3/S0025-5718-00-01278-3.pdf), where one of the authors of the original 1992 paper proposes a strategy that can take advantage of parallel processing.
 
@@ -42,7 +42,7 @@ while updating the factors _B_, _A_ and _Q_.
 
 Here,
 - _x_ is the sequence of real numbers for which we are trying to find a relation. In the context of matrix equations like equation 1, consider _x_ to be a 1 x _n_ matrix of real numbers
-- _B_ and _A_ are _n_ x _n_ matrices with integer entries and determinant _1_ or _-1_. They are identity matrices at initialization. After each iterat_H_ andion, _B_ = _A<sup>-1<sup>_.
+- _B_ and _A_ are _n_ x _n_ matrices with integer entries and determinant _1_ or _-1_. They are identity matrices at initialization. After each iteration, _B_ = _A<sup>-1<sup>_.
 - _H<sub>x</sub>_ is an _n_ x _n-1_ matrix with real entries, non-zero diagonal entries, and zeroes above the diagonal
 - _Q_ is a rotation matrix that keeps _0s_ above the diagonal of _AH<sub>x</sub>Q_
 

@@ -45,7 +45,7 @@ func TestNew(t *testing.T) {
 	gamma00 := "1."
 	expected00, err := newExpectedState(rawStrs00, sortedRawStrs00, gamma00)
 	assert.NoError(t, err)
-	actual00, err := New(rawStrs00, "1")
+	actual00, err := NewState(rawStrs00, "1", ReductionFull)
 	expected00.testEquality(t, actual00)
 	expected00.checkSortedToUnsorted(t, actual00)
 
@@ -54,7 +54,7 @@ func TestNew(t *testing.T) {
 	gamma01 := "1.16"
 	expected01, err := newExpectedState(rawStrs01, sortedRawStrs01, gamma01)
 	assert.NoError(t, err)
-	actual01, err := New(rawStrs01, gamma01)
+	actual01, err := NewState(rawStrs01, gamma01, ReductionFull)
 	assert.NoError(t, err)
 	expected01.testEquality(t, actual01)
 	expected01.checkSortedToUnsorted(t, actual01)
@@ -74,7 +74,7 @@ func TestState_OneIteration(t *testing.T) {
 			input[j] = getRandomDecimalStr(t, digitsPerEntry)
 		}
 		gammaStr := fmt.Sprintf("%f", 1.16+rand.Float64()/10)
-		state, err := New(input, gammaStr)
+		state, err := NewState(input, gammaStr, ReductionFull)
 		assert.NoError(t, err)
 		var roundOffErrorAsString string
 		numIterations := 0 // needed outside the loop below

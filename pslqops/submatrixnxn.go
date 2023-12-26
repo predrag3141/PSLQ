@@ -151,8 +151,8 @@ func PerformRowOp(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 }
 
 func RemoveCorner(h *bigmatrix.BigMatrix, ro *RowOperation) error {
-	numRows, numCols := h.Dimensions()
-	err := ro.ValidateIndices(numRows, numCols, "RemoveCorner")
+	numRows := h.NumRows()
+	err := ro.ValidateIndices(numRows, "RemoveCorner")
 	if err != nil {
 		return err
 	}

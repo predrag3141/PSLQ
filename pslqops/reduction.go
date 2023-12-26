@@ -10,95 +10,112 @@ import (
 	"pslq/util"
 )
 
-// GetInt64D returns the integer array that best emulates the defining property of
-// its floating point equivalent, D0 = getD0(h). That property is that D0 H is
-// the diagonal of H on its diagonal, 0 elsewhere.
+const (
+	makeUSmallerThanT = iota
+	makeTSmallerThanU
+)
+
+// GetInt64D returns a row operation matrix that reduces a lower quadrangular matrix like
+// the matrix H in the original PSLQ paper. It returns
+// - Whether the reduction matrix contains a large element
+// - Whether the reduction matrix is the identity
+// - Any error encountered.
 //
-// There are two ways to do this: by first computing D0, the floating point version of
-// D, and rounding every entry to the nearest integer; or directly. In the first case,
-// the recursion or previously computed elements is
+// GetInt64D operates in three modes
+// - Full reduction
+// - All but the last row
+// - Gentle reduction.
 //
-// for k := j + 1; k <= i; k++ { d0[i*numRows+k] -= d0[i*numRows+k] * hkjOverHjj[k*numRows+j] }
+// In full reduction mode, GetInt64D returns the integer array that best emulates the ability
+// of a floating point matrix D for which DH equals the diagonal of H on its diagonal, but DH
+// is 0 elsewhere. Such a floating point matrix is derived in section 2.2 of "A Gentle
+// Introduction to PSLQ" https://arminstraub.com/downloads/math/pslq.pdf
 //
-// In the direct way, the recursion is on previously computed elements, but *already rounded*:
+// In all but last row mode, full reduction is applied to all but the last row, which is left
+// unchanged.
 //
-// for k := j + 1; k <= i; k++ { dEntry -= float64(dMatrix[i*numRows+k]) * hkjOverHjj[k*numRows+j] }
-//
-// It is not clear whether the original 1992 PSLQ paper intended to use rounded-off values,
-// but when read literally, it does say to use them. Both ways are offered. It is strongly
-// suggested to use the computeFromD0 == false, because experiments in reduction_test.go
-// show that this setting consistently results in a smaller
-//
-// | D H - [H[i][j] if i = j, 0 otherwise] |
-func GetInt64D(h *bigmatrix.BigMatrix, computeFromD0Optional ...bool) ([]int64, bool, error) {
+// In gentle reduction mode -- used in strategies that prioritize keeping row n populated
+// with non-zero elements -- GetInt64D simply ensures that elements of the sub-diagonal of
+// H are at most half the size of the diagonal elements directly above them. In partial
+// reduction mode, the last row of H is left unchanged.
+func GetInt64D(h *bigmatrix.BigMatrix, reductionMode int) ([]int64, bool, bool, error) {
+	// Initializations
+	isIdentity := true
 	numRows := h.NumRows()
+	numRowsToReduce := numRows
+	dMatrix := make([]int64, numRows*numRows)
+	if reductionMode == ReductionAllButLastRow {
+		numRowsToReduce = h.NumRows() - 1
+		dMatrix[h.NumRows()*h.NumRows()-1] = 1
+	}
 	largeEntryThresh := float64(math.MaxInt32 / int32(numRows))
 	containsLargeEntry := false
 
-	// Initializations with default option being to *not* compute from D0
-	var computeFromD0 bool
-	if len(computeFromD0Optional) == 0 {
-		computeFromD0 = false
-	} else {
-		computeFromD0 = computeFromD0Optional[0]
-	}
-	dMatrix := make([]int64, numRows*numRows)
-
-	if computeFromD0 {
-		d0, err := getD0(h)
-		if err != nil {
-			return []int64{}, false, err
-		}
-		for i := 0; i < numRows; i++ {
-			dMatrix[i*numRows+i] = 1
-			for j := 0; j < i; j++ {
-				d0Entry := d0[i*numRows+j]
-				if math.IsInf(d0Entry, 0) {
-					return []int64{}, false, fmt.Errorf("GetInt64D: d0[%d][%d] is infinite", i, j)
-				}
-				if math.Abs(d0Entry) > largeEntryThresh {
-					containsLargeEntry = true
-				}
-				if d0Entry < 0.0 {
-					dMatrix[i*numRows+j] = -int64(0.5 - d0Entry)
-				} else {
-					dMatrix[i*numRows+j] = int64(0.5 + d0Entry)
-				}
-			}
-		}
-		return dMatrix, containsLargeEntry, nil
-	}
-
-	// The computation is to be direct, rather than from D0. The method
-	// parallels that used in getD0
+	// Return a row operation that performs a full reduction as described in the
+	// original 1992 PSLQ paper.
 	hkjOverHjj, err := getRatios(h)
 	if err != nil {
-		return []int64{}, false, err
+		return []int64{}, false, false, err
 	}
 
 	// hkjOverHjj is now a lookup table for H[k][j] / H[j][j] in the formula,
 	// D[i][j] = sum over k=j+1,...,i of (D[i][k] H[k][j]) / H[j][j]
-	for i := 0; i < numRows; i++ {
+	currentRow := make([]int64, numRows) // Copied to dMatrix when entries grow too big in gentle reduction mode
+	for i := 0; i < numRowsToReduce; i++ {
 		dMatrix[i*numRows+i] = 1
+		useCurrentRow := false // Whether any entry exceeds gentleReductionModeThresh in gentle reduction mode
 		for j := i - 1; 0 <= j; j-- {
-			var dEntry float64
+			var dEntryAsFloat64 float64
+			var dEntryAsInt64 int64
 			for k := j + 1; k <= i; k++ {
-				dEntry -= float64(dMatrix[i*numRows+k]) * hkjOverHjj[k*numRows+j]
+				dEntryAsFloat64 -= float64(dMatrix[i*numRows+k]) * hkjOverHjj[k*numRows+j]
 			}
-			if math.IsInf(dEntry, 0) {
-				return []int64{}, false, fmt.Errorf("GetInt64D: dMatrix[%d][%d] is infinite", i, j)
+			if math.IsInf(dEntryAsFloat64, 0) {
+				return []int64{}, false, false, fmt.Errorf("GetInt64D: dMatrix[%d][%d] is infinite", i, j)
 			}
-			if math.Abs(dEntry) > largeEntryThresh {
+			if math.Abs(dEntryAsFloat64) > largeEntryThresh {
 				containsLargeEntry = true
 			}
-			if dEntry < 0.0 {
-				dMatrix[i*numRows+j] = -int64(0.5 - dEntry)
+			if dEntryAsFloat64 < 0.0 {
+				dEntryAsInt64 = -int64(0.5 - dEntryAsFloat64)
 			} else {
-				dMatrix[i*numRows+j] = int64(0.5 + dEntry)
+				dEntryAsInt64 = int64(0.5 + dEntryAsFloat64)
+			}
+			if reductionMode == ReductionGentle {
+				if (j == i-1) && (dEntryAsInt64 != 0) {
+					// So far currentRow is zero in column numbers i,...,numRows-1. So, there is no need
+					// to zero out columns 1+1,...,numRows-1 of currentRow. In gentle reduction mode,
+					// when (i,j) is a sub-diagonal position as it is here, its value is copied into D.
+					dMatrix[i*numRows+j] = dEntryAsInt64
+					isIdentity = false
+				}
+
+				// When large coefficients of D are needed to reduce H, it is a sign that the entries in H
+				// have grown too large. So currentRow is stored in case large coefficients appear, and
+				// the flag to use currentRow is set to true if a large coefficient does appear.
+				currentRow[j] = dEntryAsInt64
+				if (dEntryAsInt64 > gentleReductionModeThresh) || (-dEntryAsInt64 > gentleReductionModeThresh) {
+					useCurrentRow = true
+				}
+			} else if dEntryAsInt64 != 0 {
+				dMatrix[i*numRows+j] = dEntryAsInt64
+				isIdentity = false
+			}
+		}
+		if useCurrentRow {
+			// The current reduction mode is gentle, and a large coefficient has appeared in the current
+			// row, row i, of D. This is a sign that there are large values in row i of H. To tamp down row
+			// i of H, row i of D is used, rather than being left as zero except near the diagonal. Note
+			// that H[i][i-1] has already been set, so the j-loop below stops before reaching H[i][i-1].
+			for j := 0; j < i-1; j++ {
+				if currentRow[j] != 0 {
+					dMatrix[i*numRows+j] = currentRow[j]
+					isIdentity = false
+				}
 			}
 		}
 	}
-	return dMatrix, containsLargeEntry, nil
+	return dMatrix, containsLargeEntry, isIdentity, nil
 }
 
 func printInt64Matrix(name string, x []int64, numRows, numCols int) {
@@ -263,7 +280,7 @@ func UpdateInt64A(aMatrix, dMatrix []int64, numRows int, rowOperation *RowOperat
 		return false, fmt.Errorf("UpdateInt64A: len(dMatrix) == %d != %d = expected length",
 			len(dMatrix), expectedLength)
 	}
-	err := rowOperation.ValidateAll(numRows, numRows-1, "UpdateInt64A")
+	err := rowOperation.ValidateAll(numRows, "UpdateInt64A")
 	if err != nil {
 		return false, fmt.Errorf("UpdateInt64A: could not validate rowOperation: %q", err.Error())
 	}
@@ -329,7 +346,7 @@ func UpdateBigNumberA(
 		return fmt.Errorf("UpdateInt64A: len(dMatrix) == %d != %d = expected length",
 			len(dMatrix), expectedLength)
 	}
-	err := rowOperation.ValidateAll(numRows, numRows-1, "UpdateBigNumberA")
+	err := rowOperation.ValidateAll(numRows, "UpdateBigNumberA")
 	if err != nil {
 		return err
 	}
@@ -425,7 +442,7 @@ func UpdateInt64B(bMatrix, eMatrix []int64, numRows int, rowOperation *RowOperat
 			len(eMatrix), expectedLength,
 		)
 	}
-	err := rowOperation.ValidateAll(numRows, numRows-1, "UpdateInt64B")
+	err := rowOperation.ValidateAll(numRows, "UpdateInt64B")
 	if err != nil {
 		return false, err
 	}
@@ -486,7 +503,7 @@ func UpdateBigNumberB(
 	numRows int,
 	rowOperation *RowOperation,
 ) error {
-	err := rowOperation.ValidateAll(numRows, numRows-1, "UpdateBigNumberB")
+	err := rowOperation.ValidateAll(numRows, "UpdateBigNumberB")
 	if err != nil {
 		return err
 	}
@@ -514,7 +531,7 @@ func UpdateBigNumberB(
 func UpdateXInt64(xMatrix *bigmatrix.BigMatrix, erMatrix []int64, rowOperation *RowOperation) error {
 	xNumCols := xMatrix.NumCols()
 	expectedLength := xNumCols * xNumCols
-	err := rowOperation.ValidateIndices(xNumCols, xNumCols-1, "UpdateXInt64")
+	err := rowOperation.ValidateIndices(xNumCols, "UpdateXInt64")
 	if err != nil {
 		return err
 	}
@@ -589,7 +606,7 @@ func UpdateXInt64(xMatrix *bigmatrix.BigMatrix, erMatrix []int64, rowOperation *
 // If dimensions do not match, and this is detected, an error is returned.
 func UpdateXBigNumber(xMatrix, erMatrix *bigmatrix.BigMatrix, rowOperation *RowOperation) error {
 	xNumCols := xMatrix.NumCols()
-	err := rowOperation.ValidateIndices(xNumCols, xNumCols-1, "UpdateXBigNumber")
+	err := rowOperation.ValidateIndices(xNumCols, "UpdateXBigNumber")
 	if err != nil {
 		return err
 	}
@@ -756,34 +773,6 @@ func getRatios(h *bigmatrix.BigMatrix) ([]float64, error) {
 	return hkjOverHjj, nil
 }
 
-// getD0 gets the floating point matrix D0 with 1s on its diagonal, 0s
-// above the diagonal and, for j < i,
-//
-// D0[i][j] = sum over k=j,...,i of (DO[i][k] H[k][j]) / H[j][j]
-//
-// D0 is the floating point version of the matrix, D, defined on page 4
-// of the original PSLQ paper. It is used only for testing purposes.
-func getD0(h *bigmatrix.BigMatrix) ([]float64, error) {
-	numRows := h.NumRows()
-	hkjOverHjj, err := getRatios(h)
-	if err != nil {
-		return []float64{}, err
-	}
-
-	// hkjOverHjj is now a lookup table for H[k][j] / H[j][j] in the formula,
-	// D0[i][j] = sum over k=j+1,...,i of (DO[i][k] H[k][j]) / H[j][j]
-	d0 := make([]float64, numRows*numRows)
-	for i := 0; i < numRows; i++ {
-		d0[i*numRows+i] = 1.0
-		for j := i - 1; 0 <= j; j-- {
-			for k := j + 1; k <= i; k++ {
-				d0[i*numRows+j] -= d0[i*numRows+k] * hkjOverHjj[k*numRows+j]
-			}
-		}
-	}
-	return d0, nil
-}
-
 // rightMultiplyByBigNumberER right-multiplies leftMatrix, in-place, by
 // erMatrix, under the assumptions that erMatrix
 //
@@ -859,4 +848,171 @@ func rightMultiplyByBigNumberER(leftMatrix, erMatrix *bigmatrix.BigMatrix, indic
 		}
 	}
 	return nil
+}
+
+// @formatter:off
+// reducePair calls a provided function, reportRowOp, with a parameter that reportRowOp
+// should interpret as a 2x2 matrix R that reduces t and u to t' and u', i.e.
+//
+//	_   _     _    _
+//
+// R |  t  | = |  t'  |
+//
+//	|_ u _|   |_ u' _|
+//
+// Reduction ends when either it cannot continue, or reportRowOp returns true. Every time
+// reportRowOp is called, reducePair has set t to t' and u to u'. Termination conditions are:
+//   - t' or u' is essentially 0. If this happens when t' is essentially zero, t' and u' are
+//     swapped and R is updated to reflect that. This is because t is considered to be a diagonal
+//     element of H, which can never be zero while the algorithm is running.
+//   - An entry in R would exceed maxMatrixEntry in absolute value if reduction were to continue.
+//   - As noted above, when reportRowOp returns true.
+//
+// @formatter:on
+func reducePair(
+	t, u *bignumber.BigNumber, maxMatrixEntry int, caller string, reportRowOp func([]int) bool,
+) error {
+	// Initializations
+	oneHalf := bignumber.NewPowerOfTwo(-1)
+	rowOpMatrix := []int{1, 0, 0, 1}
+	coefficientAsBigNumber := bignumber.NewFromInt64(0)
+	loopIterations := 0
+
+	for (!t.IsSmall()) && (!u.IsSmall()) {
+		// At the start of each loop, force |u| <= |t|
+		reorderRows(t, u, rowOpMatrix, makeUSmallerThanT) // since this loop assumes |u| <= |t|
+
+		// Since |u| <= |t|, R' forces |t| down with rows [-nint(t/u), 1] [1,0], where
+		// "nint" means nearest int
+		_, err := coefficientAsBigNumber.Quo(t, u) // to be rounded down and negated
+		if err != nil {
+			_, tStr := t.String()
+			_, uStr := u.String()
+			reorderRows(t, u, rowOpMatrix, makeUSmallerThanT) // otherwise t could be set to essentially-zero
+			reportRowOp(rowOpMatrix)
+			return fmt.Errorf(
+				"%s: could not compute %q/%q: %q", caller, tStr, uStr, err.Error(),
+			)
+		}
+
+		// The result of adding or subtracting 1/2, depending on the sign of coefficientAsBigNumber,
+		// then rounding towards zero, is nint(coefficientAsBigNumber)
+		if coefficientAsBigNumber.IsNegative() {
+			coefficientAsBigNumber.Sub(coefficientAsBigNumber, oneHalf)
+		} else {
+			coefficientAsBigNumber.Add(coefficientAsBigNumber, oneHalf)
+		}
+		coefficientAsInt64Ptr := coefficientAsBigNumber.RoundTowardsZero()
+
+		// Handle edge cases where coefficientAsInt64Ptr is nil, is de-referenced to zero,
+		// or is de-referenced into such a large integer that it cannot be incorporated
+		// into rowOpMatrix with entries below maxMatrixEntry.
+		//
+		// The second of these edge cases, where *coefficientAsInt64Ptr == 0, should never
+		// happen. The other two should be extremely rare.
+		if coefficientAsInt64Ptr == nil {
+			// Edge case: u ~ 0 and coefficientAsBigNumber = t/u. This is a sign of a very
+			// successful reduction, I guess. It is not possible to update rowOpMatrix, so return.
+			// Rows should not be re-ordered since u is essentially zero and t should be non-zero.
+			reportRowOp(rowOpMatrix)
+			return nil // rowOpMatrix entries are guaranteed <= maxMatrixEntry
+		}
+		coefficientAsInt64 := *coefficientAsInt64Ptr
+		if coefficientAsInt64 == 0 {
+			// Since |u| <= |t|, |coefficientAsInt64| = |nint(t/u)| > 0. There is no way
+			// coefficientAsInt64 can be zero, other than a catastrophic error.
+			// In view of the catastrophic error, rows are not re-ordered (why bother?).
+			_, tAsStr := t.String()
+			_, uAsStr := u.String()
+			reportRowOp(rowOpMatrix)
+			return fmt.Errorf("%s: computed nearest integer to  %q/%q as zero", caller, tAsStr, uAsStr)
+		}
+		if (coefficientAsInt64 > int64(maxMatrixEntry)) || (-coefficientAsInt64 > int64(maxMatrixEntry)) {
+			// The coefficient is so large that it cannot be converted to an int that is within the
+			// allowed range. Such a large coefficient cannot be incorporated into rowOpMatrix, except.
+			// on the first time through the main loop of this function (hence the "if" test below). Since
+			// u and t should not have been essentially zero entering this loop, the smaller of the two
+			// belongs on the diagonal (where t is) when re-ordering rows.
+			if loopIterations > 0 {
+				reorderRows(t, u, rowOpMatrix, makeTSmallerThanU) // Since neither t nor u is essentially zero
+				reportRowOp(rowOpMatrix)
+				return nil // rowOpMatrix entries are guaranteed <= maxMatrixEntry
+			}
+		}
+
+		// The edge cases have been dispensed with. R' has rows [1, -nint(t/u)] and [0,1].
+		// nint(t/u) = coefficientAsInt64
+		a := rowOpMatrix[0] - int(coefficientAsInt64)*rowOpMatrix[2]
+		b := rowOpMatrix[1] - int(coefficientAsInt64)*rowOpMatrix[3]
+		if (a > maxMatrixEntry) || (a < -maxMatrixEntry) || (b > maxMatrixEntry) || (b < -maxMatrixEntry) {
+			// Since u and t should not have been essentially zero entering this loop, the
+			// smaller of the two belongs on the diagonal (where t is) when re-ordering rows.
+			if loopIterations > 0 {
+				reorderRows(t, u, rowOpMatrix, makeTSmallerThanU) // Since neither t nor u is essentially zero
+				reportRowOp(rowOpMatrix)
+				return nil // rowOpMatrix entries are guaranteed <= maxMatrixEntry
+			}
+		}
+		rowOpMatrix[0] = a // rowOpMatrix entries are guaranteed <= maxMatrixEntry
+		rowOpMatrix[1] = b // rowOpMatrix entries are guaranteed <= maxMatrixEntry
+		addThisToT := bignumber.NewFromInt64(0).Int64Mul(-coefficientAsInt64, u)
+		t.Set(bignumber.NewFromInt64(0).Add(t, addThisToT))
+
+		// Check termination conditions. There is no need to check whether u is
+		// essentially zero, because the loop condition did that.
+		if t.IsSmall() {
+			reorderRows(t, u, rowOpMatrix, makeUSmallerThanT) // makes u essentially 0, instead of t
+			reportRowOp(rowOpMatrix)
+			return nil
+		}
+		if reportRowOp(rowOpMatrix) {
+			// reorderRows to make |t| <= |u| would be a no-op, since |t| has just been reduced.
+			return nil // rowOpMatrix entries are guaranteed <= maxMatrixEntry
+		}
+		loopIterations++
+	}
+
+	// The last iteration of the main loop, if any, made |t| smaller than |u|. The only time
+	// this is undesirable is when t is essentially zero, since t is typically a diagonal element.
+	if t.IsSmall() && (!u.IsSmall()) {
+		reorderRows(t, u, rowOpMatrix, makeUSmallerThanT) // makes u essentially 0, instead of t
+	}
+	reportRowOp(rowOpMatrix)
+	return nil // rowOpMatrix entries are guaranteed <= maxMatrixEntry
+}
+
+// reorderRows makes |u| <= |t| or |t| <= |u| according to the parameter, how, by swapping
+// rows in r and swapping t and u, if required.
+func reorderRows(t, u *bignumber.BigNumber, r []int, how int) {
+	// Handle t and u being essentially zero by returning early or ignoring the parameter, how.
+	if u.IsSmall() {
+		// Row order should not be changed, since this could put essentially-zero on the diagonal
+		// (which is where t normally comes from).
+		return
+	}
+	if !t.IsSmall() {
+		// Since t is not essentially zero, it is OK to follow the wishes of the calling function
+		absT := bignumber.NewFromInt64(0).Abs(t)
+		absU := bignumber.NewFromInt64(0).Abs(u)
+		tCmpU := absT.Cmp(absU)
+		if (how == makeUSmallerThanT) && tCmpU > -1 {
+			// No action is required
+			return
+		}
+		if (how == makeTSmallerThanU) && tCmpU == -1 {
+			// No action is required
+			return
+		}
+	}
+
+	// All possible reasons not to swap rows have been checked
+	a := r[0]
+	b := r[1]
+	r[0] = r[2]
+	r[1] = r[3]
+	r[2] = a
+	r[3] = b
+	oldT := bignumber.NewFromBigNumber(t)
+	t.Set(u)
+	u.Set(oldT)
 }
