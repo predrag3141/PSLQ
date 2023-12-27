@@ -83,7 +83,7 @@ func GetInt64D(h *bigmatrix.BigMatrix, reductionMode int) ([]int64, bool, bool, 
 				dEntryAsInt64 = int64(0.5 + dEntryAsFloat64)
 			}
 			if reductionMode == ReductionGentle {
-				if (j == i-1) && (dEntryAsInt64 != 0) {
+				if (i < numRows-1) && (j == i-1) && (dEntryAsInt64 != 0) {
 					// So far currentRow is zero in column numbers i,...,numRows-1. So, there is no need
 					// to zero out columns 1+1,...,numRows-1 of currentRow. In gentle reduction mode,
 					// when (i,j) is a sub-diagonal position as it is here, its value is copied into D.
