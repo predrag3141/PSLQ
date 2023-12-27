@@ -4,15 +4,16 @@ package pslqops
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"math"
 	"math/big"
 	"math/rand"
 	"os"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
 	"strconv"
 	"testing"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
+	"github.com/stretchr/testify/assert"
 )
 
 const (

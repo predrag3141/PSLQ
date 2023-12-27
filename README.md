@@ -186,13 +186,18 @@ The metric `|largest diagonal element / last|` refers to the diagonal just befor
 
 ### The Swap, Reduce, Solve Strategy
 
-An advanced version of "IDASIF" from the table above can be implemented using this repository. This strategy, called "Swap, Reduce, Solve" (SRS), has two phases. In both phases, the priority is to "swap" values of diagonal elements to make them increase towards the bottom right. When no further swaps can be made on adjacent rows that improve the diagonal of _H_, diagonal elements are reduced using a row operation involving the diagonal element and the last row of _H_. If this puts a zero in the last row of _H_, the column represents a solution of _<x,m>=0_: If _i_ is the lowest-numbered row with non-zero in a given column of _H_, column _i_ of _B_ is a solution of _<x,m>=0_.
+An advanced version of "IDASIF" from the table above can be implemented using this repository. This strategy, called "Swap, Reduce, Solve" (SRS), has two phases. Phase 1 refers to the time before the maximum number of possible solutions of _<x,m>=0_ is found; and phase 2 refines those solutions.
 
-If it's not clear already from the above brief description, every opportunity to swap diagonal elements is seized, at the expense of reducing diagonal elements of _H_. And reducing diagonal elements of _H_ sometimes puts zeroes in the last row of _H_, making the column with the diagonal element a solution of _<x,m>=0_. The order of priority, therefore, is "swap, then "reduce and (maybe) solve".
+A summary of phases 1 and 2 is:
 
-For now, we will focus on the first phase of SRS. Sub-section headings indicate which phase the section refers to. In phase 1, SRS slows down the Hermite reduction of _H_ to the point where its interior is just reduced enough to enable operations on adjacent rows, and does not blow up in absolute value. The first phase concludes with a solution of _<x,m>=0_ for each column of _H_. Phase 2 performs full Hermite reduction, as in the classic PSLQ algorithm. Phase 2 continues improving the diagonal by swapping both adjacent *and* non-adjacent rows. No reductions of diagonal elements, or new solutions, occur in phase 2.
+- Phase 1: _H_ contains non-zero elements in its last row, row _n_. Under the right conditions, row combinations of non-zero elements of row _n_ and diagonal can be used to reduce the absolute values of diagonal elements of _H_.
+- Phase 2: _H_ no longer contains non-zero elements in row _n_. For any column with zero in row _n_ (which is all columns in phase 2), the smallest index, _i_ of a non-zero entry, is the index of a column in _B_ with a solution of _<x,m>=0_.
 
-In phase 1, when there is no way to swap diagonal values, SRS (relucantly) reduces the bottom-right element of _H_'s diagonal with a row operation that combines the last two rows. This may free up diagonal swaps for a while, after which there follows a second reduction of the last diagonal element. At some point (with integer input at least), there comes a point where no further reductions *or* swaps are possible. This means that a solution has appeared in the bottom-right element of _H_.
+In both phases, the priority is to "swap" values of diagonal elements to make them increase towards the bottom right. In phase 1, when no further swaps can be made on adjacent rows that improve the diagonal of _H_, diagonal elements are reduced using a row operation involving the diagonal element and the last row of _H_. In phase 2, the equivalent situation terminates the entire algorithm.
+
+In phase 1 only, when there are no swaps to perform, the SRS strategy (reluctantly) reduces a diagonal element with a row operation involving row _n_. Thus the second priority is to "reduce", and sometimes reducing creates a solution in _B_. Hence the name, "Swap, Reduce, Solve". As noted earlier, phase 2 has no reductions, so the only option is to swap or terminate. Still, "Swap, Reduce, Solve" is an accurate overall description.
+
+For now, we will focus on the first phase of SRS. Sub-section headings below indicate which phase the section refers to. In phase 1, SRS slows down the Hermite reduction of _H_ to the point where its interior is just reduced enough to enable operations on adjacent rows, and does not blow up in absolute value. The first phase concludes with a solution of _<x,m>=0_ for each column of _H_. Phase 2 performs full Hermite reduction, as in the classic PSLQ algorithm. Phase 2 continues improving the diagonal by swapping both adjacent *and* non-adjacent rows. No reductions of diagonal elements, or new solutions, occur in phase 2.
 
 Once the right-most column is fully reduced, putting a zero in _H<sub>n,n-1</sub>_, the same procedure that did that for column _n-1_ works for column _n-2_, then _n-3_, etc. This procedure only works in columns to the right of which row _n_ is zero. Though the zeroes do appear in row _n_ eventually, they only appear when it improves the diagonal of _H_.
 
@@ -376,6 +381,12 @@ Phase 2 is, thankfully, much easier to explain than phase 1. As noted earlier, p
 In phase 2, each possible pair, _(j<sub>0</sub>, j<sub>1</sub>)_, is ranked by how large _L<sub>0</sub>/L<sub>1</sub>_ is -- the larger the better. The pair with the largest _L<sub>0</sub>/L<sub>1</sub>_ is swapped. If no pair has _L<sub>0</sub>/L<sub>1</sub> > 1_, phase 2 and the entire algorithm terminates.
 
 Phase 2 works surprisingly well, albeit slowly. The reason it works well is the same reason it works slowly: There is no shortage of non-adjacent row swaps to perform, even though each requires not just one sub-diagonal element to be accounted for when computing _L<sub>1</sub>_, but _j<sub>1</sub> - j<sub>0</sub>_ of them.  The abundance of possible non-adjacent row swaps makes for slow, steady progress. The time it would take to terminate phase 2 may still be polynomial, as phase 1 probably is, but the polynomial would have a degree one higher than that of phase 1 because it operates on arbitrary pairs of rows, not single rows and their immediate successors.
+
+Since the inputs for high-dimension problems are exquisitely precise, so too are the elements of _H_ during phase 1. This enables the algorithm to recognize when a solution is found by the fact that an entry in the last row of _H_ is essentially zero.
+
+After phase 1, however, there is no longer a need to recognize solutions. The solutions, which already lie in the columns of _B_, are just being combined by integer column operations (whose inverses are row operations in _H_). _H_ is no more than a rough guide, relatively speaking, for which rows to swap.
+
+Because _H_ no longer needs to be kept with high precision, the `bignumber` package used in phase 1 is no longer needed. _H_ can be kept in `float64` or even `float32` throughout phase 2. However, the repository does not yet take advantage of this insight.
 
 #### Final Thoughts on SRS
 

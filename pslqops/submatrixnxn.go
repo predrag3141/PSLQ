@@ -4,8 +4,9 @@ package pslqops
 
 import (
 	"fmt"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
 )
 
 // The idea behind this file is to perform a row operation on more than

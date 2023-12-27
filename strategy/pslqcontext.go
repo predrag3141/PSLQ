@@ -6,7 +6,8 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
-	"pslq/bignumber"
+
+	"github.com/predrag3141/PSLQ/bignumber"
 )
 
 // The input to PSLQ will be a xLen-long vector with

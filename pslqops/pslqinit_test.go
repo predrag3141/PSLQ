@@ -3,10 +3,11 @@
 package pslqops
 
 import (
-	"github.com/stretchr/testify/assert"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
 	"testing"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetNormalizedX(t *testing.T) {

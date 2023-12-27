@@ -5,9 +5,10 @@ package pslqops
 import (
 	"fmt"
 	"math"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
-	"pslq/util"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
+	"github.com/predrag3141/PSLQ/util"
 )
 
 const (

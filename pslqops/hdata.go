@@ -3,8 +3,9 @@ package pslqops
 import (
 	"fmt"
 	"math"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
 )
 
 // This module provides data structures strategies can use as primitives.

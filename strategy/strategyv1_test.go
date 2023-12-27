@@ -4,15 +4,16 @@ package strategy
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"math"
 	"math/rand"
 	"os"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
-	"pslq/pslqops"
 	"sort"
 	"testing"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
+	"github.com/predrag3141/PSLQ/pslqops"
+	"github.com/stretchr/testify/assert"
 )
 
 const (

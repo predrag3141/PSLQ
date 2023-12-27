@@ -4,8 +4,9 @@ package pslqops
 
 import (
 	"fmt"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
 )
 
 func GetRawX(input []string) (*bigmatrix.BigMatrix, error) {

@@ -2,13 +2,14 @@ package pslqops
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"math"
 	"math/rand"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
-	"pslq/util"
 	"testing"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
+	"github.com/predrag3141/PSLQ/util"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetBottomRightOfH(t *testing.T) {

@@ -1,4 +1,4 @@
-module pslq
+module github.com/predrag3141/PSLQ
 
 go 1.19
 

@@ -2,10 +2,11 @@ package pslqops
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"math/rand"
-	"pslq/util"
 	"testing"
+
+	"github.com/predrag3141/PSLQ/util"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPermuteRowsAndCols(t *testing.T) {

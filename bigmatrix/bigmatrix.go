@@ -5,8 +5,9 @@ package bigmatrix
 
 import (
 	"fmt"
-	"pslq/bignumber"
 	"strings"
+
+	"github.com/predrag3141/PSLQ/bignumber"
 )
 
 type BigMatrix struct {

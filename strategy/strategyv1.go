@@ -9,9 +9,10 @@ package strategy
 import (
 	"fmt"
 	"math"
-	"pslq/bigmatrix"
-	"pslq/bignumber"
-	"pslq/pslqops"
+
+	"github.com/predrag3141/PSLQ/bigmatrix"
+	"github.com/predrag3141/PSLQ/bignumber"
+	"github.com/predrag3141/PSLQ/pslqops"
 )
 
 // Smallest float is math.SmallestNonzeroFloat64 ~ 4.9 x 10^-324. Stay well

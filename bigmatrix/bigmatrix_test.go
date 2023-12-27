@@ -4,12 +4,13 @@ package bigmatrix
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"os"
-	"pslq/bignumber"
-	"pslq/util"
 	"testing"
+
+	"github.com/predrag3141/PSLQ/bignumber"
+	"github.com/predrag3141/PSLQ/util"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
