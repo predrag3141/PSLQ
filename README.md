@@ -24,13 +24,19 @@ There are lots of issues to work out, including the fact that the entries of _A_
 
 Rather than run down all the details of the transformation of the LWE problem into a PSLQ problem, the point here is to raise the possibility that PSLQ is a powerful, if under-appreciated, tool for cryptanalysis. To be a credible tool, PSLQ should be able to solve _<x,m> = 0_ with the smallest possible _m_ when _x_ has hundreds of large integer entries. This repository begins to tackle this problem.
 
-Without some changes, PSLQ is not a useful tool for cryptanalysis. PSLQ is designed to handle non-integer, real input. Given integer input, PSLQ as defined in the original 1992 paper quickly finds a bad (high-norm) solution, _m_, and terminates.
+Without some changes, PSLQ is not a useful tool for cryptanalysis. PSLQ was originally designed to handle non-integer, non-integer input. Given integer input, PSLQ as defined in the original 1992 paper quickly finds a bad (high-norm) solution, _m_, and terminates.
 
-Read on to see in detail how this problem can be fixed. For now, let it suffice to say that the modification of PSLQ proposed here delays the termination of the algorithm until the solution is optimal.  PSLQ, as originally defined, is both a framework and a strategy. The framework consists of a matrix equation and a set of allowed operations on this equation that change its components until a solution of _<x,m> = 0_ is found. The framework cannot change; the strategy can. In this case, the strategy is modified to delay termination and optimize the solution.
+Read on to see in detail how this problem can be fixed. For now, let it suffice to say that the modification of PSLQ proposed here delays the termination of the algorithm until the solution is optimal.
 
-The strategy specifies what operations to perform, and when to perform them. The framework cannot change, because it is what guarantees some invariants needed to solve _<x,m> = 0_. The strategy most certainly can be modified, and has been in papers like [this](https://community.ams.org/journals/mcom/2001-70-236/S0025-5718-00-01278-3/S0025-5718-00-01278-3.pdf), where one of the authors of the original 1992 paper proposes a strategy that can take advantage of parallel processing.
+### PSLQ Framework and Strategy
+
+PSLQ, as originally defined, is both a framework and a strategy. The framework consists of a matrix equation and a set of allowed operations on this equation that change its components until a solution of _<x,m> = 0_ is found. The strategy specifies what operations to perform, and when to perform them.
+
+The framework cannot change; the strategy can. In fact, the strategy has been modified in the literature, most notably in [this paper](https://community.ams.org/journals/mcom/2001-70-236/S0025-5718-00-01278-3/S0025-5718-00-01278-3.pdf), where one of the authors of the original 1992 paper proposes a strategy that can take advantage of parallel processing. The reason the framework cannot change is that its set of allowed operations is what guarantees some invariants needed to solve _<x,m> = 0_.
 
 The adjective, "classic", in both this README and in the code, refers to the original strategy suggested in the 1992 paper. The classic strategy is geared towards proving bounds on the performance of PSLQ, so it can be considered a polynomial time algorithm that finds solutions within a certain factor of the optimal solution.
+
+In this repository, the classic strategy is modified greatly. The purpose of the modifications is to delay termination and optimize the solution.
 
 ## How PSLQ Works
 
