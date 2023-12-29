@@ -117,7 +117,7 @@ _0_ = _(xBAH<sub>x</sub>Q)<sub>n-1</sub>_ = _(xBH)<sub>n-1</sub>_ = _(xB)<sub>n-
 
 The rightmost equality above just says that column _n-1_ of _B_ is a solution we can call "_m_" of _<x,m> = 0_.
 
-## Improvements of PSLQ Based on the Diagonal of H
+## Trading Time for Accuracy Using the Diagonal of H
 
 Each iteration of PSLQ performs a pair of row operations on _H_ -- one to tame the diagonal of _H_, another to reduce the entries below the diagonal. In this section, "row operation" refers to the former, designed to tame the diagonal of _H_. Any row operation with determinant 1 or -1 is acceptable. But the original 1992 PSLQ paper and the 1999 analysis of PSLQ consider only swaps of adjacent rows.
 
