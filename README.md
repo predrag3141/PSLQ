@@ -109,9 +109,13 @@ _Am<sup>t</sup>_ =_<B<sup>-1</sup>,_ column _n-1_ of _B>_ = _e<sub>n−1</sub>_,
 
 The second of the two "=" signs is true for any _B<sup>-1</sup>_ and _B_. The left and right quantities are equated in the proof of lemma 10 without connecting this equality to the second assumption. So _Am<sup>t</sup>=e<sub>n-1</sup>_ can appear to be a separate assumption but it's not.
 
-With all of the above, lemma 10 is more readable and its assumptions are clear. The first assumption depends only on the initial setup of PSLQ and the fact that _A_ has integer entries and unit determiannt; so no row operation with unit determinant falsifies it.
+The first assumption depends only on the initial setup of PSLQ and the fact that _A_ has integer entries and unit determinant. So no row operation with unit determinant falsifies the first assumption.
 
-The second assumption relies only on the fact that _(xBH)<sub>n-1</sub>_ = 0. We know this is a valid assumption because lemma 10 applies when _H<sub>n,n-1</sub>_ is the lone non-zero element of column _n-1_ of _H_. This means that _(xB)<sub>n-1</sub>=0_, i.e. column _n-1_ of _B_ is a solution _m_ of _<x,m>=0_.
+The second assumption relies only on the fact that _H<sub>n,n-1</sub> = 0_, leaving _H<sub>n-1,n-1</sub>_ as the lone non-zero entry in column _n-1_ of _H_. Equation 1, _xBAH<sub>x</sub>Q = 0_, tells us that in particular, if you just focus on the last coordinate of _xBAH<sub>x</sub>Q_, that coordinate is zero. From this and _H<sub>n-1,n-1</sub>_ being the only non-zero entry in column _n-1_, we get:
+
+_0_ = _(xBAH<sub>x</sub>Q)<sub>n-1</sub>_ = _(xBH)<sub>n-1</sub>_ = _(xB)<sub>n-1</sub> (H<sub>n-1,n-1</sub>) &rArr; (xB)<sub>n-1</sub> = 0_
+
+The rightmost equality above just says that column _n-1_ of _B_ is a solution we can call "_m_" of _<x,m> = 0_.
 
 ## Improvements of PSLQ Based on the Diagonal of H
 
