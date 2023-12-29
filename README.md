@@ -89,7 +89,7 @@ Of greatest importance is the last diagonal element, _H<sub>n-1,n-1</sub>_. Lemm
 
 ### A Deep Dive into Lemma 10
 
-Lemma 10 is crucial to the strategies employed in this repository, so we need to delve into some of the details of its proof. This section is a guide to that proof, not a full proof. It makes the proof more readable, and reveals the assumptions behind the lemma. That way, we can be assured that adding row operations to the toolkit used in classical PSLQ does not violate the assumptions.
+Lemma 10 is crucial to the strategies employed in this repository, so we need to delve into some of the details of its proof. This section is a guide to that proof, not a full proof. It fills in some details, and fleshes out the assumptions behind the lemma. That way, we can be assured that adding row operations to the toolkit used in classical PSLQ does not violate the assumptions.
 
 Lemma 10 relies on the assumptions listed below, which are not broken by any row operation with determinant 1 or -1 ("unit determinant"), or any rotation to remove zeroes above the diagonal of H. These assumptions refer to
 
@@ -100,7 +100,7 @@ Lemma 10 relies on the assumptions listed below, which are not broken by any row
 
 The assumptions are:
 
-- _AP<sub>x</sub>_ = _TDQ<sup>t</sup>H<sub>x</sub><sup>t</sup>_ is a decomposition of AP<sub>x</sub> into into the product of a lower trapezoidal matrix _T_ with diagonal _1s_, an invertible diagonal matrix _D_ with the same diagonal as _H_, and an _n−1×n_ matrix _Q<sup>t</sup>H<sub>x</sub><sup>t</sup>_ with orthonormal rows. This, by the way, is copied from the proof of theorem 1, not lemma 10. But the proof of lemma 10 is trying to say this and doesn't quite accomplish the task.
+- _AP<sub>x</sub>_ = _TDQ<sup>t</sup>H<sub>x</sub><sup>t</sup>_ is a decomposition of AP<sub>x</sub> into into the product of a lower trapezoidal matrix _T_ with diagonal _1s_, an invertible diagonal matrix _D_ with the same diagonal as _H_, and an _n−1×n_ matrix _Q<sup>t</sup>H<sub>x</sub><sup>t</sup>_ with orthonormal rows. This, by the way, is copied from the proof of theorem 1, not lemma 10. The proof of lemma 10 implicitly refers back to that proof.
 - At the point where a zero appears in _H<sub>n,n-1</sub>_, the _(n−1)_-st column of _B_ is _m_.
 
 Based on the second assumption,
