@@ -23,10 +23,11 @@ const (
 	// As the above formula indicates, the weight given the current round-off
 	// error is 0.05. This is controlled by:
 	roundOffCurrentWeight     = "0.05"
-	gentleReductionModeThresh = 10000 // D matrix entry value above which to override gentle reduction mode
+	gentleReductionModeThresh = 10 // D matrix entry value above which to override gentle reduction mode
 	ReductionFull             = iota
 	ReductionAllButLastRow
-	ReductionGentle
+	ReductionGentle      // This mode is suspect. It may result in entries in D that exceed the capacity of int64
+	ReductionSubDiagonal // This mode is also suspect. It led to an infinite loop calling OneIteration in a test
 )
 
 // State holds the state of a running PSLQ algorithm
@@ -48,6 +49,7 @@ type State struct {
 	roundOffHistoryWeight         *bignumber.BigNumber
 	reductionMode                 int
 	consecutiveIdentityReductions int
+	maxDMatrixEntry               int64
 }
 
 // inputSort is a mechanism for sorting the input
@@ -180,7 +182,8 @@ func (s *State) OneIteration(
 	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) (*RowOperation, error),
 ) (bool, error) {
 	// Step 1 of this PSLQ iteration
-	dMatrix, dHasLargeEntry, isIdentity, err := GetInt64D(s.h, s.reductionMode)
+	largeEntryThresh := int64(math.MaxInt32 / s.numRows)
+	dMatrix, maxEntry, isIdentity, err := GetInt64D(s.h, s.reductionMode)
 	if isIdentity {
 		s.consecutiveIdentityReductions++
 	} else {
@@ -189,7 +192,10 @@ func (s *State) OneIteration(
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not compute D from H: %q", err.Error())
 	}
-	if dHasLargeEntry {
+	if maxEntry > s.maxDMatrixEntry {
+		s.maxDMatrixEntry = maxEntry
+	}
+	if maxEntry > largeEntryThresh {
 		err = s.convertToBigNumber()
 		if err != nil {
 			return false, fmt.Errorf(
@@ -261,6 +267,10 @@ func (s *State) IsInAllButLastRowReductionMode() bool {
 // is the identity. When this is large, the algorithm has no recent progress.
 func (s *State) ConsecutiveIdentityReductions() int {
 	return s.consecutiveIdentityReductions
+}
+
+func (s *State) GetMaxDMatrixEntry() int64 {
+	return s.maxDMatrixEntry
 }
 
 func (s *State) GetObservedRoundOffError() *bignumber.BigNumber {

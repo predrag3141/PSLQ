@@ -71,4 +71,8 @@ func TestSwapReduceSolve(t *testing.T) {
 		solutionMatches := pslqContext.SolutionMatchesRelation(solution)
 		pslqContext.PrintSolution(solution, solutionIsCorrect, solutionMatches, solutionNorm)
 	}
+	fmt.Printf(
+		"Maximum entry in D by in reduction mode %d: %d\n",
+		initialReductionMode, srs.state.GetMaxDMatrixEntry(),
+	)
 }

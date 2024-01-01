@@ -208,8 +208,9 @@ func updateRecentRowOperations(
 
 	// Update recentRowOpsAndScores[2]
 	if trySwap && ((generalRowOp == nil) || (swapScore.Cmp(generalRowOpScore) < 0)) {
-		// Since trySwap is true, swapScore is worth using. Since generalRowOpScore is either
-		// nil or larger than swapScore, swapScore is the only score worth using.
+		// Swapping rows
+		// - Improves the diagonal of H.
+		// - Beats all general row operations.
 		var err error
 		recentRowOpsAndScores[2].Score, err = bignumber.NewFromInt64(0).Quo(tSq, swapScore)
 		if err != nil {
@@ -228,11 +229,14 @@ func updateRecentRowOperations(
 			PermutationOfH: [][]int{{j, j + 1}},
 			PermutationOfB: [][]int{{j, j + 1}},
 		}
-	} else if generalRowOpScore.Cmp(tSq) < 0 {
-		// Since generalRowOpScore < t^2, generalRowOpScore is worth using. Since trySwap is
-		// false, or generalRowOpScore is non-nil and <= swapScore, generalRowOpScore is the
-		// only score worth using. Note that thisMatrix is still the matrix returned by
-		// getBestGeneralRowOperation.
+	} else if (generalRowOp != nil) && (generalRowOpScore.Cmp(tSq) < 0) {
+		// See comments for the "if true" case above. Negating them for this "else" case,
+		// swapping rows either
+		// - Does not improve the diagonal of H.
+		// - Is beaten by some general row operation.
+		//
+		// Also, a general row operation has been found that does improve the diagonal of H,
+		// so that general row operation is returned.
 		var err error
 		recentRowOpsAndScores[2].Score, err = bignumber.NewFromInt64(0).Quo(tSq, generalRowOpScore)
 		if err != nil {
@@ -247,18 +251,26 @@ func updateRecentRowOperations(
 		recentRowOpsAndScores[2].RowOp = generalRowOp
 	}
 
-	// Since trySwap is false, or generalRowOpScore is non-nil and <= swapScore,
-	// generalRowOpScore is the only score that might be worth using. But it is not
-	// worth using since t^2 <= generalRowOpScore.  No row operation reduces |t|.
+	// See comments from the "if true" and "else" cases above. None of the following is true:
+	// - Swapping rows improves the diagonal of H.
+	// - Swapping rows beats all general row operations.
+	// - A general row operation has been found that improves the diagonal of H.
+	//
+	// The first and third bullets above say that neither a row swap nor a general row operation
+	// improves the diagonal of H, so there is no row operation to set. recentRowOpsAndScores[2]
+	// remains nil.
 	return v, vSq, nil
 }
 
-// getGeneralRowOperation returns the matrix R that achieves the best score when it right-
-// multiplies the sub-matrix T of H, [[t, 0], [u, v]]; along with the score of R. The
-// score of R is RTQ[0][0]^2, where Q is a Givens rotation that zeroes out RTQ[0][1]. The lower
-// the score, the better R is as a candidate row operation. The best score found here will
-// ultimately be compared to STQ'[0][0], where S is a row swap and Q' is the Givens rotation that
-// zeroes out ST[0][1].
+// getGeneralRowOperation returns the non-swap row operation with matrix R that achieves the best
+// score when it right-multiplies the sub-matrix T of H, [[t, 0], [u, v]]; along with the score
+// of R. The score of R is RTQ[0][0]^2, where Q is a Givens rotation that zeroes out RTQ[0][1]. The
+// lower the score, the better R is as a candidate row operation. If no score is below 1, however,
+// nil is returned as the row operation. The returned score is always non-nil, but by default, in
+// the case where there are no general row operations to try, it is a ridiculous math.MaxInt64.
+//
+// The best score found here will ultimately be compared to STQ'[0][0], where S is a row swap and
+// Q' is the Givens rotation that zeroes out ST[0][1].
 //
 // Since Givens rotations performed with a right-multiply preserve row lengths, and RTQ[0][1] = 0,
 // RTQ[0][0] = sqrt(RT[0][0]^2+RT[0][1]^2). The score of R is just the square of that entry of RTQ.

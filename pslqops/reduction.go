@@ -39,84 +39,77 @@ const (
 // with non-zero elements -- GetInt64D simply ensures that elements of the sub-diagonal of
 // H are at most half the size of the diagonal elements directly above them. In partial
 // reduction mode, the last row of H is left unchanged.
-func GetInt64D(h *bigmatrix.BigMatrix, reductionMode int) ([]int64, bool, bool, error) {
+func GetInt64D(h *bigmatrix.BigMatrix, reductionMode int) ([]int64, int64, bool, error) {
 	// Initializations
+	var maxEntry int64
 	isIdentity := true
 	numRows := h.NumRows()
 	numRowsToReduce := numRows
 	dMatrix := make([]int64, numRows*numRows)
-	if reductionMode == ReductionAllButLastRow {
+	if reductionMode != ReductionFull {
 		numRowsToReduce = h.NumRows() - 1
-		dMatrix[h.NumRows()*h.NumRows()-1] = 1
+		dMatrix[numRows*numRows-1] = 1
 	}
-	largeEntryThresh := float64(math.MaxInt32 / int32(numRows))
-	containsLargeEntry := false
 
-	// Return a row operation that performs a full reduction as described in the
-	// original 1992 PSLQ paper.
+	// Compute ratios of elements below the diagonal of H and the diagonal elements above them.
 	hkjOverHjj, err := getRatios(h)
 	if err != nil {
-		return []int64{}, false, false, err
+		return []int64{}, maxEntry, false, err
 	}
 
 	// hkjOverHjj is now a lookup table for H[k][j] / H[j][j] in the formula,
 	// D[i][j] = sum over k=j+1,...,i of (D[i][k] H[k][j]) / H[j][j]
-	currentRow := make([]int64, numRows) // Copied to dMatrix when entries grow too big in gentle reduction mode
-	for i := 0; i < numRowsToReduce; i++ {
-		dMatrix[i*numRows+i] = 1
-		useCurrentRow := false // Whether any entry exceeds gentleReductionModeThresh in gentle reduction mode
-		for j := i - 1; 0 <= j; j-- {
+	currentRow := make([]int64, numRows)
+	dMatrix[0] = 1 // needed since the row loop below starts at i == 1
+	for i := 1; i < numRowsToReduce; i++ {
+		// Populate currentRow and set the flag for using it in gentle reduction mode
+		currentRow[i] = 1
+		useCurrentRowInGentleMode := false
+		minCol := 0
+		if reductionMode == ReductionSubDiagonal {
+			minCol = i - 1
+		}
+		for j := i - 1; minCol <= j; j-- {
 			var dEntryAsFloat64 float64
-			var dEntryAsInt64 int64
 			for k := j + 1; k <= i; k++ {
-				dEntryAsFloat64 -= float64(dMatrix[i*numRows+k]) * hkjOverHjj[k*numRows+j]
+				dEntryAsFloat64 -= float64(currentRow[k]) * hkjOverHjj[k*numRows+j]
 			}
 			if math.IsInf(dEntryAsFloat64, 0) {
-				return []int64{}, false, false, fmt.Errorf("GetInt64D: dMatrix[%d][%d] is infinite", i, j)
+				return []int64{}, maxEntry, false, fmt.Errorf("GetInt64D: dMatrix[%d][%d] is infinite", i, j)
 			}
-			if math.Abs(dEntryAsFloat64) > largeEntryThresh {
-				containsLargeEntry = true
-			}
+			var dMatrixEntry int64
 			if dEntryAsFloat64 < 0.0 {
-				dEntryAsInt64 = -int64(0.5 - dEntryAsFloat64)
+				dMatrixEntry = -int64(0.5 - dEntryAsFloat64)
 			} else {
-				dEntryAsInt64 = int64(0.5 + dEntryAsFloat64)
+				dMatrixEntry = int64(0.5 + dEntryAsFloat64)
 			}
-			if reductionMode == ReductionGentle {
-				if (i < numRows-1) && (j == i-1) && (dEntryAsInt64 != 0) {
-					// So far currentRow is zero in column numbers i,...,numRows-1. So, there is no need
-					// to zero out columns 1+1,...,numRows-1 of currentRow. In gentle reduction mode,
-					// when (i,j) is a sub-diagonal position as it is here, its value is copied into D.
-					dMatrix[i*numRows+j] = dEntryAsInt64
-					isIdentity = false
-				}
-
-				// When large coefficients of D are needed to reduce H, it is a sign that the entries in H
-				// have grown too large. So currentRow is stored in case large coefficients appear, and
-				// the flag to use currentRow is set to true if a large coefficient does appear.
-				currentRow[j] = dEntryAsInt64
-				if (dEntryAsInt64 > gentleReductionModeThresh) || (-dEntryAsInt64 > gentleReductionModeThresh) {
-					useCurrentRow = true
-				}
-			} else if dEntryAsInt64 != 0 {
-				dMatrix[i*numRows+j] = dEntryAsInt64
-				isIdentity = false
+			currentRow[j] = dMatrixEntry
+			if (dMatrixEntry > gentleReductionModeThresh) || (-dMatrixEntry > gentleReductionModeThresh) {
+				useCurrentRowInGentleMode = true
 			}
 		}
-		if useCurrentRow {
-			// The current reduction mode is gentle, and a large coefficient has appeared in the current
-			// row, row i, of D. This is a sign that there are large values in row i of H. To tamp down row
-			// i of H, row i of D is used, rather than being left as zero except near the diagonal. Note
-			// that H[i][i-1] has already been set, so the j-loop below stops before reaching H[i][i-1].
-			for j := 0; j < i-1; j++ {
-				if currentRow[j] != 0 {
-					dMatrix[i*numRows+j] = currentRow[j]
-					isIdentity = false
+
+		// Use currentRow to populate the current row of dMatrix.
+		dMatrix[i*numRows+i] = 1
+		if (reductionMode == ReductionGentle) && !useCurrentRowInGentleMode {
+			// minCol needs to be increased to match what it is for ReductionSubDiagonal,
+			// because there is no entry in currentRow large enough to trigger its usage.
+			minCol = i - 1
+		}
+		for j := minCol; j < i; j++ {
+			if currentRow[j] != 0 {
+				dMatrixEntry := currentRow[j]
+				dMatrix[i*numRows+j] = dMatrixEntry
+				isIdentity = false
+				if dMatrixEntry > maxEntry {
+					maxEntry = dMatrixEntry
+				} else if -dMatrixEntry > maxEntry {
+					maxEntry = -dMatrixEntry
 				}
 			}
 		}
 	}
-	return dMatrix, containsLargeEntry, isIdentity, nil
+	return dMatrix, maxEntry, isIdentity, nil
 }
 
 func printInt64Matrix(name string, x []int64, numRows, numCols int) {

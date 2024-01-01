@@ -67,8 +67,8 @@ func TestReduceLargeRowsAndCols(t *testing.T) {
 			h, err := bigmatrix.NewFromInt64Array(dh[reductionNbr], numRows, numCols)
 			assert.NoError(t, err)
 			var dMatrix []int64
-			var containsLargeEntry, isIdentity bool
-			dMatrix, containsLargeEntry, isIdentity, err = GetInt64D(h, ReductionFull)
+			var isIdentity bool
+			dMatrix, _, isIdentity, err = GetInt64D(h, ReductionFull)
 			if reductionNbr == 0 {
 				assert.False(t, isIdentity)
 			}
@@ -76,7 +76,6 @@ func TestReduceLargeRowsAndCols(t *testing.T) {
 				break
 			}
 			assert.NoError(t, err)
-			assert.False(t, containsLargeEntry)
 			dh[reductionNbr+1], err = util.MultiplyIntInt(dMatrix, dh[reductionNbr], numRows)
 
 			maxRatio = 0.0
@@ -104,49 +103,121 @@ func TestGetInt64D_GetE(t *testing.T) {
 	// Combines testing of GetInt64E and GetBigNumberE
 	const numRows = 7
 	const numCols = 6
-	const maxEntry = 10
+	const maxDiagonalOrNonGentleModeEntry = 10
+	const maxSubDiagonalGentleModeEntry = gentleReductionModeThresh * maxDiagonalOrNonGentleModeEntry
 	const numSeedsPerTest = 1
 	const minSeed = 12345
 	const numTests = 10
 
 	seed := minSeed
+	maxDMatrixEntry := make([]int64, 10) // Long enough to index by reduction mode
+	dhEntriesTested := make([]int, 10)   // Long enough to index by reduction mode
 	for testNbr := 0; testNbr < numTests; testNbr++ {
-		rand.Seed(int64(seed))
-		hEntries := make([]int64, numRows*numCols)
-		for i := 0; i < numRows; i++ {
-			for j := 0; j <= i && j < numCols; j++ {
-				sgn := 2*rand.Intn(2) - 1
-				hEntries[i*numCols+j] = int64(sgn) * int64(rand.Intn(maxEntry))
-				if i == j && hEntries[i*numCols+j] == 0 {
-					hEntries[i*numCols+j] = int64(sgn)
+		for _, reductionMode := range []int{
+			ReductionFull, ReductionGentle, ReductionAllButLastRow, ReductionSubDiagonal,
+		} {
+			rand.Seed(int64(seed))
+			hEntries := make([]int64, numRows*numCols)
+			for i := 0; i < numRows; i++ {
+				for j := 0; j <= i && j < numCols; j++ {
+					sgn := 2*rand.Intn(2) - 1
+					if (i == j) || (reductionMode != ReductionGentle) {
+						hEntries[i*numCols+j] = int64(sgn) * int64(rand.Intn(maxDiagonalOrNonGentleModeEntry))
+					} else {
+						// In gentle reduction mode, entries below the diagonal must be large to make it
+						// likely that at least one entry in D exceeds gentleReductionModeThresh,
+						hEntries[i*numCols+j] = int64(sgn) * int64(rand.Intn(maxSubDiagonalGentleModeEntry))
+					}
+					if (i == j) && (hEntries[i*numCols+j] == 0) {
+						hEntries[i*numCols+j] = int64(sgn)
+					}
 				}
 			}
-		}
-		h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
-		assert.NoError(t, err)
-		for _, performFullReduction := range []bool{false, true} {
+			h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
+			assert.NoError(t, err)
+
 			// Test GetInt64D
-			dMatrix, containsLargeEntry, _, err := GetInt64D(h, ReductionFull)
+			var dMatrix []int64
+			var maxEntry int64
+			dMatrix, maxEntry, _, err = GetInt64D(h, reductionMode)
 			assert.NoError(t, err)
-			assert.False(t, containsLargeEntry)
-			dh, err := util.MultiplyIntInt(dMatrix, hEntries, numRows)
+			if maxEntry > maxDMatrixEntry[reductionMode] {
+				maxDMatrixEntry[reductionMode] = maxEntry
+			}
+
+			// Entries of DH below the diagonal are no more than half the diagonal element above
+			// them in absolute value. The most straightforward way to test this is by looping
+			// through columns, then rows.
+			dAsBigMatrix, err := bigmatrix.NewFromInt64Array(dMatrix, numRows, numRows)
 			assert.NoError(t, err)
-			for i := 0; i < numCols; i++ {
-				absDiagonalEntry := dh[i*numCols+i]
-				if absDiagonalEntry < 0 {
-					absDiagonalEntry = -absDiagonalEntry
-				}
-				for j := i + 1; j < numRows; j++ {
-					if performFullReduction || ((j == i+1) && (j < numCols)) {
-						// If not performing full reduction, DH[j,i] is directly below DH[i,i]
-						// and not in the last row of DH. The prohibition on being in the last
-						// row is because in partial reduction, the last row is not reduced.
-						absInteriorEntry := dh[j*numCols+i]
-						if absInteriorEntry < 0 {
-							absInteriorEntry = -absInteriorEntry
+			dh, err := bigmatrix.NewEmpty(numRows, numCols).Mul(dAsBigMatrix, h)
+			assert.NoError(t, err)
+			assert.NoError(t, err)
+			hasEntryAboveThresh := make([]bool, numRows)
+
+			// In gentle reduction mode, flag rows after i+1 with entries above
+			// gentleReductionModeThresh. This is used both for deciding whether to
+			// skip the rest of this loop iteration, and for ensuring that at least
+			// one row has a large enough entry to test DH.
+			if reductionMode == ReductionGentle {
+				for i := 0; i < numRows; i++ {
+					for j := 0; j < i; j++ {
+						dEntry := dMatrix[i*numRows+j]
+						if (gentleReductionModeThresh < dEntry) || (gentleReductionModeThresh < -dEntry) {
+							hasEntryAboveThresh[i] = true
+							break
 						}
-						assert.LessOrEqualf(t, 2*absInteriorEntry, absDiagonalEntry, "i = %d, j = %d", i, j)
 					}
+				}
+			}
+
+			for i := 0; i < numCols; i++ {
+				var absDiagonalEntry *bignumber.BigNumber
+				absDiagonalEntry, err = dh.Get(i, i)
+				assert.NoError(t, err)
+				absDiagonalEntry.Abs(absDiagonalEntry)
+
+				for j := i + 1; j < numRows; j++ {
+					// Bypass the last row in all-but-last-row, gentle or sub-diagonal reduction mode
+					if (reductionMode != ReductionFull) && (j == numRows-1) {
+						break
+					}
+
+					if j != i+1 {
+						// In gentle reduction mode, below the sub-diagonal, do not test entries in rows
+						// with a maximum entry under gentleReductionModeThresh. DH is not bounded by a
+						// multiple of the diagonal element above the entries in such rows.
+						if (reductionMode == ReductionGentle) && (hasEntryAboveThresh[j] == false) {
+							continue
+						}
+
+						// In sub-diagonal reduction mode, below the sub-diagonal, there is no
+						// expectation that any entries in DH will be bounded by a multiple of
+						// the diagonal element above them.
+						if reductionMode == ReductionSubDiagonal {
+							continue
+						}
+					}
+
+					// It is expected that 2*DH[j][i] <= DH[i][i]
+					dhEntriesTested[reductionMode]++
+					var absInteriorEntry *bignumber.BigNumber
+					absInteriorEntry, err = dh.Get(j, i)
+					absInteriorEntry.Abs(absInteriorEntry)
+					twoAbsInteriorEntry := bignumber.NewFromInt64(0).Int64Mul(2, absInteriorEntry)
+					_, absInteriorEntryAsStr := absInteriorEntry.String()
+					_, twoAbsInteriorEntryAsStr := twoAbsInteriorEntry.String()
+					_, absDiagonalEntryAsStr := absDiagonalEntry.String()
+					assert.Truef(
+						t, twoAbsInteriorEntry.Cmp(absDiagonalEntry) <= 0,
+						"Reduction mode = %d hasEntryAboveThresh = %v\n"+
+							"current row of D: %v\n"+
+							"2 DH[%d][%d] = (2)(%s) = %s > %s = DH[%d][%d]",
+						reductionMode, hasEntryAboveThresh,
+						dMatrix[j*numRows:(j+1)*numRows],
+						j, i, absInteriorEntryAsStr, twoAbsInteriorEntryAsStr,
+						absDiagonalEntryAsStr, i, i,
+					)
 				}
 			}
 
@@ -189,6 +260,16 @@ func TestGetInt64D_GetE(t *testing.T) {
 		}
 		seed += numSeedsPerTest
 	}
+	fmt.Printf(
+		"Max entry in D by reduction mode: [full, all-but-last-row, gentle, sub-diagonal] =  [%d, %d, %d, %d]\n",
+		maxDMatrixEntry[ReductionFull], maxDMatrixEntry[ReductionAllButLastRow],
+		maxDMatrixEntry[ReductionGentle], maxDMatrixEntry[ReductionSubDiagonal],
+	)
+	fmt.Printf(
+		"Number of entries of DH tested by reduction mode: [full, all-but-last-row, gentle, sub-diagonal] =  [%d, %d, %d, %d]\n",
+		dhEntriesTested[ReductionFull], dhEntriesTested[ReductionAllButLastRow],
+		dhEntriesTested[ReductionGentle], dhEntriesTested[ReductionSubDiagonal],
+	)
 }
 
 func TestReduceH(t *testing.T) {
@@ -210,9 +291,8 @@ func TestReduceH(t *testing.T) {
 		}
 		h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
 		assert.NoError(t, err)
-		d, containsLargeEntry, _, err := GetInt64D(h, ReductionFull)
+		d, _, _, err := GetInt64D(h, ReductionFull)
 		assert.NoError(t, err)
-		assert.False(t, containsLargeEntry)
 		dh, err := util.MultiplyIntInt(d, hEntries, numRows)
 		assert.NoError(t, err)
 		err = ReduceH(h, d)
