@@ -3,6 +3,7 @@ package strategy
 import (
 	cr "crypto/rand"
 	"fmt"
+	"github.com/predrag3141/PSLQ/pslqops"
 	"math"
 	"math/big"
 	"math/rand"
@@ -154,26 +155,36 @@ func SolutionNorm(solution []int64) float64 {
 }
 
 // PrintDiagonal prints the diagonal of H
-func PrintDiagonal(caption string, diagonal []*bignumber.BigNumber, ratioLargestToLast *float64) {
+func PrintDiagonal(caption string, diagonalStatistics *pslqops.DiagonalStatistics) {
 	fmt.Printf("%s: ", caption)
-	if diagonal == nil {
+	if diagonalStatistics == nil {
 		fmt.Printf("[no diagonal was saved]")
 		return
 	}
-	for i := 0; i < len(diagonal); i++ {
-		_, d := diagonal[i].String()
+	for i := 0; i < len(diagonalStatistics.Diagonal); i++ {
+		_, d := diagonalStatistics.Diagonal[i].String()
 		fmt.Printf("%q,", d)
 	}
-	if ratioLargestToLast != nil {
-		fmt.Printf(" largest / last = %f\n", *ratioLargestToLast)
+	if diagonalStatistics.Ratio != nil {
+		fmt.Printf(" largest / last = %f\n", *diagonalStatistics.Ratio)
 	} else {
 		fmt.Printf(" largest / last = infinity or unknown\n")
+	}
+	if diagonalStatistics.Correlation != nil {
+		fmt.Printf(
+			" diagonal correlation to (1,2,3,...,%d): %f\n",
+			len(diagonalStatistics.Diagonal), *diagonalStatistics.Correlation,
+		)
+	} else {
+		fmt.Printf(
+			" diagonal correlation to (1,2,3,...,%d) = infinity or unknown\n", len(diagonalStatistics.Diagonal),
+		)
 	}
 }
 
 // PrintSolution prints the results for one solution
-func (pc *PSLQContext) PrintSolution(solution []int64, solutionIsCorrect, solutionMatches bool, solutionNorm float64) {
-	preamble := fmt.Sprintf("solution %v with norm %f", solution, solutionNorm)
+func PrintSolution(solution []int64, columnOfB int, solutionIsCorrect, solutionMatches bool, solutionNorm float64) {
+	preamble := fmt.Sprintf("solution %v from column %d of B with norm %f", solution, columnOfB, solutionNorm)
 	if solutionIsCorrect && solutionMatches {
 		fmt.Printf("%s works and matches the relation seeded into the PSLQ input\n", preamble)
 	} else if solutionIsCorrect {
@@ -183,6 +194,17 @@ func (pc *PSLQContext) PrintSolution(solution []int64, solutionIsCorrect, soluti
 	} else {
 		fmt.Printf("%s failed and does not match the relation seeded into the PSLQ input\n", preamble)
 	}
+}
+
+// PrintMaxEntriesOfD prints the maximum entries of D in int64 and bigNumber modes
+func PrintMaxEntriesOfD(contextStr string, maxInt64DEntry, maxBigNumberDEntry *bignumber.BigNumber) {
+	_, maxInt64DMatrixEntryAsStr := maxInt64DEntry.String()
+	_, maxBigNumberDMatrixEntryAsStr := maxBigNumberDEntry.String()
+	fmt.Printf(
+		"When %s, maximum entry in D [int64 bigNumber]: [%q, %q]\n",
+		contextStr, maxInt64DMatrixEntryAsStr, maxBigNumberDMatrixEntryAsStr,
+	)
+
 }
 
 // getCausalRelation returns a relation that is to be orthogonal to the X vector

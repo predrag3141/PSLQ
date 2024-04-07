@@ -43,14 +43,17 @@ func TestGetBottomRightOfH(t *testing.T) {
 
 		// Compare expected to actual bottom-right of H
 		tRow := (numRows - numZeroesEndingLastRow) - 2
-		if (numCols - 1) <= numZeroesEndingLastRow {
+		if numCols == numZeroesEndingLastRow {
 			expected = &BottomRightOfH{
 				Found:        false,
 				RowNumberOfT: 0,
 				T:            nil,
 				U:            nil,
 			}
-			assert.Equal(t, expected.Found, actual.Found)
+			assert.Equalf(
+				t, expected.Found, actual.Found,
+				"numZeroesEndingLastRow = %d numCols = %d", numZeroesEndingLastRow, numCols,
+			)
 			assert.Equal(t, expected.RowNumberOfT, actual.RowNumberOfT)
 			assert.Nil(t, actual.T)
 			assert.Nil(t, actual.U)

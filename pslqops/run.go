@@ -22,12 +22,8 @@ const (
 	//
 	// As the above formula indicates, the weight given the current round-off
 	// error is 0.05. This is controlled by:
-	roundOffCurrentWeight     = "0.05"
-	gentleReductionModeThresh = 10 // D matrix entry value above which to override gentle reduction mode
-	ReductionFull             = iota
-	ReductionAllButLastRow
-	ReductionGentle      // This mode is suspect. It may result in entries in D that exceed the capacity of int64
-	ReductionSubDiagonal // This mode is also suspect. It led to an infinite loop calling OneIteration in a test
+	roundOffCurrentWeight = "0.05"
+	ReductionFull         = 0
 )
 
 // State holds the state of a running PSLQ algorithm
@@ -39,8 +35,10 @@ type State struct {
 	h                             *bigmatrix.BigMatrix
 	aInt64Matrix                  []int64
 	bInt64Matrix                  []int64
+	dInt64Matrix                  []int64
 	aBigNumberMatrix              *bigmatrix.BigMatrix
 	bBigNumberMatrix              *bigmatrix.BigMatrix
+	dBigNumberMatrix              *bigmatrix.BigMatrix
 	numRows                       int
 	numCols                       int
 	powersOfGamma                 []*bignumber.BigNumber
@@ -48,8 +46,12 @@ type State struct {
 	roundOffCurrentWeight         *bignumber.BigNumber
 	roundOffHistoryWeight         *bignumber.BigNumber
 	reductionMode                 int
+	gentlyReduceAllRows           bool
+	solutionCount                 int
 	consecutiveIdentityReductions int
-	maxDMatrixEntry               int64
+	maxInt64DMatrixEntry          *bignumber.BigNumber
+	maxBigNumberDMatrixEntry      *bignumber.BigNumber
+	allZeroRowsCalculated         int64
 }
 
 // inputSort is a mechanism for sorting the input
@@ -66,28 +68,35 @@ func (bav ByAbsValue) Swap(i, j int)      { bav[i], bav[j] = bav[j], bav[i] }
 func (bav ByAbsValue) Less(i, j int) bool { return bav[i].absValue.Cmp(bav[j].absValue) < 0 }
 
 // NewState returns a new State from a provided decimal string array
-func NewState(input []string, gammaStr string, reductionMode int) (*State, error) {
+func NewState(input []string, gammaStr string, reductionMode int, gentlyReduceAllRows bool) (*State, error) {
 	// retVal is uninitialized
 	rawX, err := GetRawX(input)
 	if err != nil {
 		return nil, fmt.Errorf("new: error in GetRawX: %q", err.Error())
 	}
 	retVal := &State{
-		useBigNumber:          false,
-		rawX:                  rawX,
-		updatedRawX:           bigmatrix.NewEmpty(1, len(input)),
-		sortedToUnsorted:      make([]int, len(input)),
-		h:                     nil,
-		aInt64Matrix:          make([]int64, len(input)*len(input)),
-		bInt64Matrix:          make([]int64, len(input)*len(input)),
-		aBigNumberMatrix:      nil,
-		bBigNumberMatrix:      nil,
-		numRows:               len(input),
-		numCols:               len(input) - 1,
-		powersOfGamma:         nil,
-		observedRoundOffError: bignumber.NewFromInt64(0),
-		roundOffCurrentWeight: nil,
-		reductionMode:         reductionMode,
+		useBigNumber:             false,
+		rawX:                     rawX,
+		updatedRawX:              bigmatrix.NewEmpty(1, len(input)),
+		sortedToUnsorted:         make([]int, len(input)),
+		h:                        nil,
+		aInt64Matrix:             make([]int64, len(input)*len(input)),
+		bInt64Matrix:             make([]int64, len(input)*len(input)),
+		dInt64Matrix:             make([]int64, len(input)*len(input)),
+		aBigNumberMatrix:         nil, // nil until the switch to bigNumber mode
+		bBigNumberMatrix:         nil, // nil until the switch to bigNumber mode
+		dBigNumberMatrix:         nil, // nil until the switch to bigNumber mode
+		numRows:                  len(input),
+		numCols:                  len(input) - 1,
+		powersOfGamma:            nil,
+		observedRoundOffError:    bignumber.NewFromInt64(0),
+		roundOffCurrentWeight:    nil,
+		reductionMode:            reductionMode,
+		gentlyReduceAllRows:      gentlyReduceAllRows,
+		solutionCount:            0,
+		maxInt64DMatrixEntry:     bignumber.NewFromInt64(0),
+		maxBigNumberDMatrixEntry: bignumber.NewFromInt64(0),
+		allZeroRowsCalculated:    0,
 	}
 
 	// sortedRawX, updatedRawX and sortedToUnsorted need to be initialized
@@ -179,34 +188,26 @@ func NewState(input []string, gammaStr string, reductionMode int) (*State, error
 // gamma^j |H[j][j]| is maximized. getR() should pass to maxJ the two
 // parameters, s.h and s.powersOfGamma, of getR(), described above.
 func (s *State) OneIteration(
-	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) (*RowOperation, error),
+	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) (*RowOperation, error), checkInvariantsOptional ...bool,
 ) (bool, error) {
-	// Step 1 of this PSLQ iteration
-	largeEntryThresh := int64(math.MaxInt32 / s.numRows)
-	dMatrix, maxEntry, isIdentity, err := GetInt64D(s.h, s.reductionMode)
-	if isIdentity {
-		s.consecutiveIdentityReductions++
-	} else {
-		s.consecutiveIdentityReductions = 0
+	// Initializations
+	checkInvariants := false
+	if len(checkInvariantsOptional) > 0 {
+		checkInvariants = checkInvariantsOptional[0]
 	}
+
+	// Step 1 of this PSLQ iteration (using big number)
+	err := s.step1()
 	if err != nil {
-		return false, fmt.Errorf("OneIteration: could not compute D from H: %q", err.Error())
+		return false, fmt.Errorf("OneIteration: error in step 1: %q\n", err.Error())
 	}
-	if maxEntry > s.maxDMatrixEntry {
-		s.maxDMatrixEntry = maxEntry
-	}
-	if maxEntry > largeEntryThresh {
-		err = s.convertToBigNumber()
+
+	// Check invariants expected after step 1
+	if checkInvariants {
+		err = s.CheckInvariants("called from OneIteration")
 		if err != nil {
-			return false, fmt.Errorf(
-				"OneIteration: could not convert current state from Int64 to BigNumber: %q",
-				err.Error(),
-			)
+			return false, fmt.Errorf("OneIteration: invalid invariant(s): %q\n", err.Error())
 		}
-	}
-	err = ReduceH(s.h, dMatrix)
-	if err != nil {
-		return false, fmt.Errorf("OneIteration: could not reduce H using D: %q", err.Error())
 	}
 
 	// Step 2 of this PSLQ iteration
@@ -221,7 +222,7 @@ func (s *State) OneIteration(
 	}
 
 	// Step 3 of this PSLQ iteration
-	err = s.step3(dMatrix, rowOperation)
+	err = s.step3(rowOperation)
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not update matrices: %q", err.Error())
 	}
@@ -237,13 +238,10 @@ func (s *State) OneIteration(
 }
 
 func (s *State) SetReductionMode(newMode int) error {
-	switch newMode {
-	case ReductionAllButLastRow, ReductionGentle, ReductionFull:
-		s.reductionMode = newMode
-		break
-	default:
-		return fmt.Errorf("SetReductionMode: newMode = %d is invalid", newMode)
+	if newMode < 0 {
+		return fmt.Errorf("SetReductionMode: reduction mode %d cannot be negative\n", newMode)
 	}
+	s.reductionMode = newMode
 	return nil
 }
 
@@ -254,13 +252,12 @@ func (s *State) IsInFullReductionMode() bool {
 
 // IsInGentleReductionMode returns whether the current reduction mode is gentle reduction.
 func (s *State) IsInGentleReductionMode() bool {
-	return s.reductionMode == ReductionGentle
+	return s.reductionMode > 0
 }
 
-// IsInAllButLastRowReductionMode returns whether the current reduction mode is all-but-last-row
-// reduction.
-func (s *State) IsInAllButLastRowReductionMode() bool {
-	return s.reductionMode == ReductionAllButLastRow
+// GetReductionMode returns the current reduction mode
+func (s *State) GetReductionMode() int {
+	return s.reductionMode
 }
 
 // ConsecutiveIdentityReductions returns the number of consecutive iterations for which matrix D
@@ -269,8 +266,16 @@ func (s *State) ConsecutiveIdentityReductions() int {
 	return s.consecutiveIdentityReductions
 }
 
-func (s *State) GetMaxDMatrixEntry() int64 {
-	return s.maxDMatrixEntry
+func (s *State) GetMaxInt64DMatrixEntry() *bignumber.BigNumber {
+	return s.maxInt64DMatrixEntry
+}
+
+func (s *State) GetMaxBigNumberDMatrixEntry() *bignumber.BigNumber {
+	return s.maxBigNumberDMatrixEntry
+}
+
+func (s *State) GetAllZeroRowsCalculated() int64 {
+	return s.allZeroRowsCalculated
 }
 
 func (s *State) GetObservedRoundOffError() *bignumber.BigNumber {
@@ -284,56 +289,56 @@ func (s *State) GetUpdatedRawX() *bigmatrix.BigMatrix {
 	return s.updatedRawX
 }
 
-// GetDiagonal returns
-//
-// - An array of BigNumbers with the diagonal entries of H
-//
-//   - A pointer to the ratio of the largest diagonal element to the
-//     last diagonal element, if that ratio can be expressed as a float64;
-//     otherwise nil.
+// GetDiagonal returns and instance of DiagonalStatistics
 //
 // The elements of the returned diagonal are deep copies.
-func (s *State) GetDiagonal() ([]*bignumber.BigNumber, *float64, error) {
-	retVal := make([]*bignumber.BigNumber, s.numCols)
-	largestDiagonalElement := bignumber.NewFromInt64(0)
+func (s *State) GetDiagonal() (*DiagonalStatistics, error) {
+	return NewDiagonalStatistics(s.h)
+}
+
+// GetSolutions returns an array of []int64 arrays that, based on the diagonal entries
+// and last row of H, should be solutions. An error is returned if there is a failure.
+func (s *State) GetSolutions() (map[int][]int64, error) {
+	retVal := make(map[int][]int64, 0)
 	var err error
 	for i := 0; i < s.numCols; i++ {
-		var retValI *bignumber.BigNumber
-		retValI, err = s.h.Get(i, i)
-		if err != nil {
-			return nil, nil, fmt.Errorf("GetDiagonal: could not get H[%d][%d]: %q", i, i, err.Error())
-		}
-		if (i == s.numCols-1) && (retValI.IsSmall()) {
-			// The last diagonal element was evidently swapped into the last row, so get it from there.
-			retValI, err = s.h.Get(s.numRows-1, s.numCols-1)
+		diagonalIsSmall := false
+		if i == s.numCols-1 {
+			var diagonalElement *bignumber.BigNumber
+			diagonalElement, err = s.h.Get(i, i)
 			if err != nil {
-				return nil, nil, fmt.Errorf(
-					"GetDiagonal: could not get H[%d][%d]: %q", s.numRows-1, s.numCols-1, err.Error(),
-				)
+				return map[int][]int64{},
+					fmt.Errorf("GetSolutions: could not get H[%d][%d]: %q", i, i, err.Error())
 			}
+			diagonalIsSmall = diagonalElement.IsSmall()
 		}
-		retVal[i] = bignumber.NewFromInt64(0).Set(retValI)
-		absRetVal := bignumber.NewFromInt64(0).Abs(retValI)
-		if absRetVal.Cmp(largestDiagonalElement) > 0 {
-			largestDiagonalElement.Set(absRetVal)
+
+		// Handle the normal case, where whether the last row in column i is small determines
+		// whether column i is a solution.
+		var lastRowElement *bignumber.BigNumber
+		lastRowElement, err = s.h.Get(s.numRows-1, i)
+		if err != nil {
+			return map[int][]int64{},
+				fmt.Errorf("GetSolutions: could not get H[%d][%d]: %q", s.numRows-1, i, err.Error())
+		}
+		lastRowIsSmall := lastRowElement.IsSmall()
+
+		// Between them, diagonalIsSmall and lastRowIsSmall tell whether column i is a solution
+		var columnOfB []int64
+		columnIndex := i
+		if lastRowIsSmall && (!diagonalIsSmall) {
+			columnOfB, err = s.GetColumnOfB(i)
+		}
+		if err != nil {
+			return map[int][]int64{}, fmt.Errorf(
+				"GetSolutions: could not get column %d of H: %q", columnIndex, err.Error(),
+			)
+		}
+		if len(columnOfB) > 0 {
+			retVal[columnIndex] = columnOfB
 		}
 	}
-	var ratioAsBigNumber *bignumber.BigNumber
-	ratioAsBigNumber, err = bignumber.NewFromInt64(0).Quo(
-		largestDiagonalElement, retVal[s.numCols-1],
-	)
-	if err != nil {
-		_, l0 := largestDiagonalElement.String()
-		_, r0 := retVal[s.numCols-1].String()
-		return nil, nil, fmt.Errorf("GetDiagonal: could compute %q/%q: %q", l0, r0, err.Error())
-	}
-	ratioAsFloat := ratioAsBigNumber.AsFloat()
-	ratioAsFloat64, _ := ratioAsFloat.Float64()
-	if math.IsInf(ratioAsFloat64, 0) {
-		return retVal, nil, nil
-	}
-	ratioAsFloat64 = math.Abs(ratioAsFloat64)
-	return retVal, &ratioAsFloat64, nil
+	return retVal, nil
 }
 
 // AboutToTerminate returns whether the last entry in the last row of s.h is small
@@ -420,7 +425,7 @@ func (s *State) GetHPairStatistics() ([]HPairStatistics, int, error) {
 	return getHPairStatistics(s.h)
 }
 
-func (s *State) CheckInvariants() error {
+func (s *State) CheckInvariants(context string) error {
 	for i := 0; i < s.numRows; i++ {
 		for j := i + 1; j < s.numCols; j++ {
 			hij, err := s.h.Get(i, j)
@@ -429,7 +434,7 @@ func (s *State) CheckInvariants() error {
 			}
 			if !hij.IsSmall() {
 				_, hijAsStr := hij.String()
-				return fmt.Errorf("CheckInvariants: H[%d][%d] = %q is not small", i, j, hijAsStr)
+				return fmt.Errorf("CheckInvariants (%s): H[%d][%d] = %q is not small", context, i, j, hijAsStr)
 			}
 		}
 	}
@@ -441,26 +446,31 @@ func (s *State) CheckInvariants() error {
 		)
 		if err != nil {
 			return fmt.Errorf(
-				"CheckInvariants: could not multiply %v by %v: %q",
-				s.aInt64Matrix, s.bInt64Matrix, err.Error(),
+				"CheckInvariants (%s): could not multiply %v by %v: %q",
+				context, s.aInt64Matrix, s.bInt64Matrix, err.Error(),
 			)
 		}
 	} else {
 		// Though A and B may contain small enough entries to fit in int64, intermediate values
-		// in their product will not, in general. Convert A and B to BigNumber, then multiply.
-		aBigNumberMatrix, err := bigmatrix.NewFromInt64Array(s.aInt64Matrix, s.numRows, s.numRows)
+		// in their product may not. Convert A and B to BigNumber, then multiply.
+		var aBigNumberMatrix, bBigNumberMatrix *bigmatrix.BigMatrix
+		aBigNumberMatrix, err = bigmatrix.NewFromInt64Array(s.aInt64Matrix, s.numRows, s.numRows)
 		if err != nil {
-			return fmt.Errorf("CheckInvariants: could not create BigNumber matrix A: %q", err.Error())
+			return fmt.Errorf(
+				"CheckInvariants (%s): could not create BigNumber matrix A: %q",
+				context, err.Error())
 		}
-		bBigNumberMatrix, err := bigmatrix.NewFromInt64Array(s.bInt64Matrix, s.numRows, s.numRows)
+		bBigNumberMatrix, err = bigmatrix.NewFromInt64Array(s.bInt64Matrix, s.numRows, s.numRows)
 		if err != nil {
-			return fmt.Errorf("CheckInvariants: could not create BigNumber matrix B: %q", err.Error())
+			return fmt.Errorf(
+				"CheckInvariants (%s): could not create BigNumber matrix B: %q",
+				context, err.Error())
 		}
 		ab, err = bigmatrix.NewEmpty(s.numRows, s.numRows).Mul(aBigNumberMatrix, bBigNumberMatrix)
 		if err != nil {
 			return fmt.Errorf(
-				"CheckInvariants: could not multiply %v by %v: %q",
-				s.aInt64Matrix, s.bInt64Matrix, err.Error(),
+				"CheckInvariants (%s): could not multiply %v by %v: %q",
+				context, s.aInt64Matrix, s.bInt64Matrix, err.Error(),
 			)
 		}
 	}
@@ -476,17 +486,37 @@ func (s *State) CheckInvariants() error {
 			abIJ, err = ab.Get(i, j)
 			if err != nil {
 				return fmt.Errorf(
-					"CheckInvariants: could not get AB[%d][%d]: %q", i, j, err.Error(),
+					"CheckInvariants (%s): could not get AB[%d][%d]: %q", context, i, j, err.Error(),
 				)
 			}
 			if abIJ.Cmp(bignumber.NewFromInt64(expected)) != 0 {
 				_, abIJAsString := abIJ.String()
-				return fmt.Errorf(
-					"CheckInvariants: AB[%d][%d] = %q != %d\nA = %v\nB = %v. using big numbers: %v",
-					i, j, abIJAsString, expected, s.aInt64Matrix, s.bInt64Matrix, s.IsUsingBigNumber(),
-				)
+				if s.IsUsingBigNumber() {
+					return fmt.Errorf(
+						"CheckInvariants (%s): AB[%d][%d] = %q != %d\nA = %v\nB = %v. Using big numbers: Yes",
+						context, i, j, abIJAsString, expected, s.aBigNumberMatrix, s.bBigNumberMatrix,
+					)
+				} else {
+					return fmt.Errorf(
+						"CheckInvariants (%s): AB[%d][%d] = %q != %d\nA = %v\nB = %v. Using big numbers: No",
+						context, i, j, abIJAsString, expected, s.aInt64Matrix, s.bInt64Matrix,
+					)
+				}
 			}
 		}
+	}
+
+	// Check that H has been reduced.
+	var hIsReduced bool
+	var row, col int
+	hIsReduced, row, col, err = isReduced(s.h, s.reductionMode, s.gentlyReduceAllRows, -10, context)
+	if err != nil {
+		return fmt.Errorf(
+			"checkInvariants (%s): error determining whether H is reduced: %q", context, err.Error(),
+		)
+	}
+	if !hIsReduced {
+		return fmt.Errorf("checkInvariants (%s): H[%d][%d] is not reduced. H=\n%v", context, row, col, s.h)
 	}
 	return nil
 }
@@ -580,7 +610,63 @@ func AboutToTerminate(h *bigmatrix.BigMatrix) (bool, error) {
 	return lastEntry.IsSmall(), nil
 }
 
-func (s *State) step3(dMatrix []int64, rowOperation *RowOperation) error {
+// step1 performs step 1 of the PSLQ algorithm.
+func (s *State) step1() error {
+	largeEntryThresh := bignumber.NewFromInt64(int64(math.MaxInt32 / s.numRows))
+	var isIdentity, calculatedAllZeroRow bool
+	var maxEntry *bignumber.BigNumber
+	var err error
+
+	if s.useBigNumber {
+		maxEntry, isIdentity, calculatedAllZeroRow, err = GetBigNumberD(
+			s.h, s.reductionMode, s.gentlyReduceAllRows, s.dBigNumberMatrix,
+		)
+		if err != nil {
+			return fmt.Errorf("OneIteration: could not compute big matrix D: %q", err.Error())
+		}
+		if calculatedAllZeroRow {
+			s.allZeroRowsCalculated++
+		}
+		err = BigNumberReduceH(s.h, s.dBigNumberMatrix)
+		if err != nil {
+			return fmt.Errorf("OneIteration: could not reduce H usingBigNumber D: %q", err.Error())
+		}
+		if maxEntry.Cmp(s.maxBigNumberDMatrixEntry) > 0 {
+			s.maxBigNumberDMatrixEntry.Set(maxEntry)
+		}
+	} else {
+		maxEntry, isIdentity, calculatedAllZeroRow, err = GetInt64D(
+			s.h, s.reductionMode, s.gentlyReduceAllRows, s.dInt64Matrix,
+		)
+		if err != nil {
+			return fmt.Errorf("OneIteration: could not compute []int64 D: %q", err.Error())
+		}
+		if calculatedAllZeroRow {
+			s.allZeroRowsCalculated++
+		}
+		err = Int64ReduceH(s.h, s.dInt64Matrix)
+		if err != nil {
+			return fmt.Errorf("OneIteration: could not reduce H using []int64 D: %q", err.Error())
+		}
+		if maxEntry.Cmp(s.maxInt64DMatrixEntry) > 0 {
+			s.maxInt64DMatrixEntry.Set(maxEntry)
+		}
+	}
+	if maxEntry.Cmp(largeEntryThresh) > 0 {
+		err = s.convertToBigNumber()
+		if err != nil {
+			return fmt.Errorf("OneIteration: could not convert state to BigNumber: %q", err.Error())
+		}
+	}
+	if isIdentity {
+		s.consecutiveIdentityReductions++
+	} else {
+		s.consecutiveIdentityReductions = 0
+	}
+	return nil
+}
+
+func (s *State) step3(rowOperation *RowOperation) error {
 	// Update H
 	err := PerformRowOp(s.h, rowOperation)
 	if err != nil {
@@ -601,39 +687,35 @@ func (s *State) step3(dMatrix []int64, rowOperation *RowOperation) error {
 
 	// Get eInt64Matrix or eBigNumberMatrix, depending on s.useBigNumber
 	if s.useBigNumber {
-		eBigNumberMatrix, err = GetBigNumberE(dMatrix, s.numRows)
+		eBigNumberMatrix, err = GetBigNumberE(s.dBigNumberMatrix, s.numRows)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not compute big matrix E: %q", err.Error())
 		}
 	} else {
-		eInt64Matrix, hasLargeEntry, err = GetInt64E(dMatrix, s.numRows)
+		eInt64Matrix, hasLargeEntry, err = GetInt64E(s.dInt64Matrix, s.numRows)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not compute []int64 E: %q", err.Error())
 		}
 		if hasLargeEntry {
 			eBigNumberMatrix, err = bigmatrix.NewFromInt64Array(eInt64Matrix, s.numRows, s.numRows)
 			if err != nil {
-				return fmt.Errorf("OneIteration: could not convert E to use BigNumbers: %q",
-					err.Error(),
-				)
+				return fmt.Errorf("OneIteration: could not convert E to use BigNumbers: %q", err.Error())
 			}
 			err = s.convertToBigNumber()
 			if err != nil {
-				return fmt.Errorf("OneIteration: could not convert to BigNumber: %q",
-					err.Error(),
-				)
+				return fmt.Errorf("OneIteration: could not convert to BigNumber: %q", err.Error())
 			}
 		}
 	}
 
 	// Update s.aInt64Matrix or s.aBigNumberMatrix, depending on s.useBigNumber
 	if s.useBigNumber {
-		err = UpdateBigNumberA(s.aBigNumberMatrix, dMatrix, s.numRows, rowOperation)
+		err = UpdateBigNumberA(s.aBigNumberMatrix, s.dBigNumberMatrix, s.numRows, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update BigMatrix A: %q", err.Error())
 		}
 	} else {
-		hasLargeEntry, err = UpdateInt64A(s.aInt64Matrix, dMatrix, s.numRows, rowOperation)
+		hasLargeEntry, err = UpdateInt64A(s.aInt64Matrix, s.dInt64Matrix, s.numRows, rowOperation)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not update []int64 A: %q", err.Error())
 		}
@@ -647,8 +729,7 @@ func (s *State) step3(dMatrix []int64, rowOperation *RowOperation) error {
 			err = s.convertToBigNumber()
 			if err != nil {
 				return fmt.Errorf(
-					"OneIteration: could not convert to BigNumber: %q",
-					err.Error(),
+					"OneIteration: could not convert to BigNumber: %q", err.Error(),
 				)
 			}
 		}
@@ -684,9 +765,7 @@ func (s *State) step3(dMatrix []int64, rowOperation *RowOperation) error {
 		if hasLargeEntry {
 			err = s.convertToBigNumber()
 			if err != nil {
-				return fmt.Errorf("OneIteration: could not convert to BigNumber: %q",
-					err.Error(),
-				)
+				return fmt.Errorf("OneIteration: could not convert to BigNumber: %q", err.Error())
 			}
 		}
 	}
@@ -695,26 +774,51 @@ func (s *State) step3(dMatrix []int64, rowOperation *RowOperation) error {
 
 func (s *State) convertToBigNumber() error {
 	var err error
-	s.useBigNumber = true
-	if s.aBigNumberMatrix == nil {
-		s.aBigNumberMatrix, err = bigmatrix.NewFromInt64Array(
-			s.aInt64Matrix, s.numRows, s.numRows,
-		)
-		if err != nil {
-			return fmt.Errorf("OneIteration: could not convert A to use BigNumbers: %q",
-				err.Error(),
-			)
-		}
+
+	// It is not an error to call this function more than once
+	if s.useBigNumber {
+		return nil
 	}
-	if s.bBigNumberMatrix == nil {
-		s.bBigNumberMatrix, err = bigmatrix.NewFromInt64Array(
-			s.bInt64Matrix, s.numRows, s.numRows,
+	s.useBigNumber = true
+
+	// It is an error to have a bigMatrix version of A here, since this line is reached only
+	// when not using bigNumbers.
+	if s.aBigNumberMatrix != nil {
+		return fmt.Errorf("OneIteration: converting to bigNumber when A already has a bigNumber version")
+	}
+	s.aBigNumberMatrix, err = bigmatrix.NewFromInt64Array(
+		s.aInt64Matrix, s.numRows, s.numRows,
+	)
+	if err != nil {
+		return fmt.Errorf("OneIteration: could not convert A to use BigNumbers: %q",
+			err.Error(),
 		)
-		if err != nil {
-			return fmt.Errorf("OneIteration: could not convert B to use BigNumbers: %q",
-				err.Error(),
-			)
-		}
+	}
+
+	// It is an error to have a bigMatrix version of B here, since this line is reached only
+	// when not using bigNumbers.
+	if s.bBigNumberMatrix != nil {
+		return fmt.Errorf("OneIteration: converting to bigNumber when B already has a bigNumber version")
+	}
+	s.bBigNumberMatrix, err = bigmatrix.NewFromInt64Array(
+		s.bInt64Matrix, s.numRows, s.numRows,
+	)
+	if err != nil {
+		return fmt.Errorf("OneIteration: could not convert B to use BigNumbers: %q",
+			err.Error(),
+		)
+	}
+
+	// It is an error to have a bigMatrix version of D here, since this line is reached only
+	// when not using bigNumbers.
+	if s.dBigNumberMatrix != nil {
+		return fmt.Errorf("OneIteration: converting to bigNumber when D already has a bigNumber version")
+	}
+	s.dBigNumberMatrix, err = bigmatrix.NewFromInt64Array(s.dInt64Matrix, s.numRows, s.numRows)
+	if err != nil {
+		return fmt.Errorf("OneIteration: could not convert D to use BigNumbers: %q",
+			err.Error(),
+		)
 	}
 	return nil
 }

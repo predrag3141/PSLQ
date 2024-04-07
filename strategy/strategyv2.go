@@ -2,7 +2,6 @@ package strategy
 
 import (
 	"fmt"
-
 	"github.com/predrag3141/PSLQ/bigmatrix"
 	"github.com/predrag3141/PSLQ/bignumber"
 	"github.com/predrag3141/PSLQ/pslqops"
@@ -26,12 +25,15 @@ type SwapReduceSolve struct {
 	SwapsSinceReduction int
 	TotalReductions     int
 	SolutionCount       int
+	Solutions           map[int][]int64
+	DiagonalStatistics  *pslqops.DiagonalStatistics
 }
 
 func NewSwapReduceSolve(
-	pslqContext *PSLQContext, log2ReductionThreshold, maxSwapsSinceReduction, reductionMode int,
+	pslqContext *PSLQContext, log2ReductionThreshold, maxSwapsSinceReduction,
+	reductionMode int, gentlyReduceAllRows bool,
 ) (*SwapReduceSolve, error) {
-	s, err := pslqops.NewState(pslqContext.InputAsDecimalString, "1.0", reductionMode)
+	s, err := pslqops.NewState(pslqContext.InputAsDecimalString, "1.0", reductionMode, gentlyReduceAllRows)
 	if err != nil {
 		return nil, fmt.Errorf("NewSwapReduceSolve: could not create a new state: %q", err.Error())
 	}
@@ -48,68 +50,8 @@ func NewSwapReduceSolve(
 	}, nil
 }
 
-func (srs *SwapReduceSolve) GetSolutions() ([][]int64, error) {
-	var retVal [][]int64
-	for i := srs.state.NumCols() - srs.SolutionCount; i < srs.state.NumCols(); i++ {
-		solutionIndex := i
-		if i == srs.state.NumCols()-1 {
-			// The solution due the fact that H[srs.state.NumCols()-1][srs.state.NumCols()-1]
-			// was the only non-zero entry in its column would have appeared in column
-			// srs.state.NumCols()-1 of B, except that, to signal termination of PSLQ,
-			// H[srs.state.NumCols()-1][srs.state.NumCols()-1] was swapped into the last row
-			// of H. This is the classical way of signaling the termination of PSLQ. It is a bit
-			// strange to do this for the SRS strategy, where there could be more than one solution,
-			// because it makes an exception to the rule that column i of B contains the solution
-			// corresponding to column i of H. But for now this way of terminating is being retained.
-			// To compensate, solutionIndex is modified to select the last row of B.
-			solutionIndex = srs.state.NumRows() - 1
-		}
-		solution, err := srs.state.GetColumnOfB(solutionIndex)
-		if err != nil {
-			return nil, fmt.Errorf("PrintSolutions: could not get column %d of B: %q", i, err.Error())
-		}
-		retVal = append(retVal, solution)
-	}
-	return retVal, nil
-}
-
 func (srs *SwapReduceSolve) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNumber) (*pslqops.RowOperation, error) {
-	if srs.state.IsInFullReductionMode() {
-		// Near the end of one run using the SRS strategy, after most solutions have been obtained (in
-		// practice, a full basis has normally been obtained), the solutions can be improved slightly by
-		// swapping either adjacent *or* non-adjacent pairs. This can be called a general-pair row operation.
-		//
-		// General row operations on adjacent rows, i.e. non-swaps, are not considered in this situation,
-		// because it is highly unlikely that a general row operation on adjacent rows is better than a swap.
-		// Reasons are:
-		// - The ability to improve the diagonal with any operation on adjacent rows has previously dried up,
-		//   or SRS would still be in gentle reduction mode.
-		// - Since most or all solutions have been found, the last rwo of H is mostly (in practice, entirely)
-		//   zero. Reductions of diagonal elements, which use non-zero elements of the last row of H, are no
-		//   longer possible.
-		// Near-equal neighboring diagonal elements, along with no new reductions of them, mean no general row
-		// operations. General row operations require a ratio of at least sqrt(3) between adjacent diagonal
-		// elements to perform better than a row swap.
-		//
-		// If no row swap can be found, even between non-adjacent rows, getGeneralPairRowOp returns a swap of
-		// the last two rows of H, which signals termination of the PSLQ algorithm.
-		if srs.SwapsSinceReduction > srs.maxSwapsSinceReduction {
-			// Too many consecutive identity D matrices call for termination, triggered
-			// by swapping the last two rows.
-			return &pslqops.RowOperation{
-				Indices:        []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
-				OperationOnH:   []int{0, 1, 1, 0},
-				OperationOnB:   []int{0, 1, 1, 0},
-				PermutationOfH: [][]int{},
-				PermutationOfB: [][]int{},
-			}, nil
-		}
-		srs.TotalSwaps++
-		srs.SwapsSinceReduction++
-		return srs.getGeneralPairRowOp()
-	}
-
-	// Try to obtain a row operation that improves the diagonal
+	// Try to obtain a row operation involving consecutive rows that improves the diagonal
 	retVal, err := srs.swapper.GetNextRowOperation()
 	if err != nil {
 		return nil, fmt.Errorf("getR: could not get a row operation: %q", err.Error())
@@ -120,46 +62,65 @@ func (srs *SwapReduceSolve) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNumbe
 		return retVal, nil
 	}
 
-	// No diagonal improvement is possible. The bottom-right of H needs to be examined
-	// for the termination criterion that the maximum diagonal element is in a solution
-	// column. If it is not time to terminate, the right-most diagonal element in any column
-	// of H containing no solution should be reduced.
+	// There is no swap of consecutive rows that improves the diagonal.
 	//
-	// But first, update the solution count. The solution count is valid even if srs.reducer
-	// is not valid, i.e. even if its Found flag is false.
+	// Since the diagonal elements of H are in the best possible order from small to large without
+	// the disruption of reducing them against the last row or swapping non-consecutive rows, the
+	// correlation of the diagonal with (1,2,3,...,numCols-1) should be meaningful.
+	var diagonalStatistics *pslqops.DiagonalStatistics
+	diagonalStatistics, err = srs.state.GetDiagonal()
+	if (diagonalStatistics.Correlation != nil) && (diagonalStatistics.Ratio != nil) {
+		fmt.Printf("[C,R] = [%f, %f] ", *diagonalStatistics.Correlation, *diagonalStatistics.Ratio)
+	} else if diagonalStatistics.Correlation != nil {
+		fmt.Printf("[C,R] = [%f, unknown] ", *diagonalStatistics.Correlation)
+	} else if diagonalStatistics.Ratio != nil {
+		fmt.Printf("[C,R] = [unknown, %f] ", *diagonalStatistics.Ratio)
+	} else {
+		fmt.Printf("[C,R] = [unknown, unknown] ")
+	}
+
+	// If srs.SolutionCount is maximal, a full basis of solutions has been found; try to find a
+	// general row operation -- one not involving consecutive rows. If there is none, then a swap of
+	// the last two rows of H is returned, signaling termination of the PSLQ algorithm.
+	if srs.SolutionCount == srs.state.NumCols() {
+		if srs.SwapsSinceReduction > srs.maxSwapsSinceReduction {
+			// Too many consecutive identity D matrices call for termination, triggered
+			// by swapping the last two rows.
+			err = srs.setDiagonalAndSolutions("getR")
+			if err != nil {
+				return nil, err
+			}
+			return &pslqops.RowOperation{
+				Indices:        []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
+				OperationOnH:   []int{0, 1, 1, 0},
+				OperationOnB:   []int{0, 1, 1, 0},
+				PermutationOfH: [][]int{},
+				PermutationOfB: [][]int{},
+			}, nil
+		}
+		srs.TotalSwaps++
+		srs.SwapsSinceReduction++
+
+		// getGeneralRowOp may fail to find a general row operation. In that case, it returns a
+		// swap of the last two rows, terminating the PSLQ algorithm.
+		return srs.getGeneralPairRowOp()
+	}
+
+	// There is no swap of consecutive rows that improves the diagonal, and there are still
+	// solutions to be found, i.e. there may still be non-zero elements of the last row of H.
+	// Non-zero elements in the last row of H can be swapped against diagonal elements to reduce
+	// those diagonal elements.
 	srs.reducer, err = pslqops.GetBottomRightOfH(h)
+	if !srs.reducer.Found {
+		// The fact that srs.reducer.Found is false signals that a full basis of solutions has
+		// been found. It is necessary to switch to full reduction mode.
+		srs.SolutionCount = h.NumCols()
+		return srs.switchToFullReductionMode()
+	}
 	srs.SolutionCount = (h.NumCols() - srs.reducer.RowNumberOfT) - 1
 
-	// Enter full reduction mode if there is no brh.T and brh.U to reduce against one-another.
-	if !srs.reducer.Found {
-		return srs.switchToFullReductionMode()
-	}
-
-	// The termination condition where no t and u can be found to reduce against one-another
-	// was not met. Next, check the termination criterion that the maximum diagonal element is
-	// in a solution column.
-	var maxDiagonalRowNbr int
-	maxDiagonalRowNbr, err = srs.maxDiagonalElementRow()
-	if err != nil {
-		return nil, fmt.Errorf(
-			"getR: could not get the row number of the maximum diagonal element: %q", err.Error(),
-		)
-	}
-	if srs.reducer.RowNumberOfT < maxDiagonalRowNbr {
-		// There are lots of solutions. In practice, it has been found that every column contains
-		// a solution. It is time to switch to full reduction mode, to
-		// - Tidy up the solutions that have been found by reducing the entries in the columns
-		//   below the diagonal
-		// - Continue with multi-row operations if any can be found that improve the diagonal
-		return srs.switchToFullReductionMode()
-	}
-
-	// Neither of the termination criteria were met.
-	//
-	// Try reducing a diagonal element. This either adds a solution in the bottom row of H, or
-	// frees up a diagonal row operation. Either way, it is OK to re-enter this loop, because
-	// if there are no diagonal row operations,  the new solution moves the output of the next
-	// call to GetBottomRightOfH one column to the left.
+	// No operation on consecutive rows can be performed, but a diagonal element can be reduced
+	// against the last row of H.
 	retVal, err = srs.reducer.Reduce(srs.maxRowOpMatrixElement, srs.log2ReductionThreshold)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -207,6 +168,10 @@ func (srs *SwapReduceSolve) getGeneralPairRowOp() (*pslqops.RowOperation, error)
 	if bestIndex < 0 {
 		// Signal termination. There are no more ways to improve the diagonal of H,
 		// or reduce diagonal elements.
+		err = srs.setDiagonalAndSolutions("getR")
+		if err != nil {
+			return nil, err
+		}
 		return &pslqops.RowOperation{
 			Indices:        []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
 			OperationOnH:   []int{0, 1, 1, 0},
@@ -226,19 +191,17 @@ func (srs *SwapReduceSolve) getGeneralPairRowOp() (*pslqops.RowOperation, error)
 	}, nil
 }
 
-func (srs *SwapReduceSolve) maxDiagonalElementRow() (int, error) {
-	diagonal, _, err := srs.state.GetDiagonal()
+// setDiagonalAndSolutions is a convenience function to set srs.DiagonalStatistics and
+// srs.Solutions when about to terminate the PSLQ algorithm.
+func (srs *SwapReduceSolve) setDiagonalAndSolutions(caller string) error {
+	var err error
+	srs.DiagonalStatistics, err = srs.state.GetDiagonal()
 	if err != nil {
-		return 0, fmt.Errorf("MaxDiagonalElementRow: could not get the diagonal of H: %q", err.Error())
+		return fmt.Errorf("%s: could not get diagonal: %q", caller, err.Error())
 	}
-	retVal := 0
-	maxDiagonalElement := bignumber.NewFromInt64(0).Abs(diagonal[retVal])
-	for i := 1; i < srs.state.NumCols(); i++ {
-		absDiagonalElement := bignumber.NewFromInt64(0).Abs(diagonal[i])
-		if maxDiagonalElement.Cmp(absDiagonalElement) < 0 {
-			maxDiagonalElement.Set(absDiagonalElement)
-			retVal = i
-		}
+	srs.Solutions, err = srs.state.GetSolutions()
+	if err != nil {
+		return fmt.Errorf("%s: could not get solutions: %q", caller, err.Error())
 	}
-	return retVal, nil
+	return nil
 }

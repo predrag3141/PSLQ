@@ -368,30 +368,40 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 	}
 }
 
+type v1TestOutput struct {
+	solution           []int64
+	solutionIsCorrect  bool
+	solutionMatches    bool
+	solutionNorm       float64
+	maxInt64DEntry     *bignumber.BigNumber
+	maxBigNumberDEntry *bignumber.BigNumber
+}
+
 func TestGetRImprovingDiagonal(t *testing.T) {
 	const minLength = 10
 	const lengthIncr = 10 // 45
 	const maxLength = 20  // 100
 	const relationElementRange = 5
-	const maxExpectedFinalRatio = 20.0
 	const randomRelationProbabilityThresh = .001
 
-	for xLen := minLength; xLen <= maxLength; xLen += lengthIncr {
-		pslqContext := GetPSLQInput(xLen, relationElementRange, randomRelationProbabilityThresh)
+	for xLenStrategyV1 := minLength; xLenStrategyV1 <= maxLength; xLenStrategyV1 += lengthIncr {
+		pslqContext := GetPSLQInput(xLenStrategyV1, relationElementRange, randomRelationProbabilityThresh)
 		for _, whenToImproveDiagonal := range []int{
 			improveDiagonalNever, improveDiagonalWhenAboutToTerminate, // improveDiagonalAlways,
 		} {
+			var strategyStr string
 			switch whenToImproveDiagonal {
 			case improveDiagonalNever:
-				fmt.Printf("\n=== length %d strategy = \"never improve diagonal\"\n", xLen)
+				fmt.Printf("\n=== length %d strategy = \"never improve diagonal\"\n", xLenStrategyV1)
 				break
 			case improveDiagonalWhenAboutToTerminate:
-				fmt.Printf("\n=== length %d strategy = \"improve diagonal when about to terminate\"\n", xLen)
+				strategyStr = "improve diagonal when about to terminate"
 				break
 			case improveDiagonalAlways:
-				fmt.Printf("\n=== length %d strategy = \"always improve diagonal\"\n", xLen)
+				strategyStr = "always improve diagonal"
 				break
 			}
+			fmt.Printf("\n=== length %d strategy = \"%s\"\n", xLenStrategyV1, strategyStr)
 			fmt.Printf("- xEntries: %v\n", pslqContext.InputAsBigInt)
 			fmt.Printf("- decimalX: %v\n", pslqContext.InputAsDecimalString)
 			fmt.Printf("- relation: %v with norm %f\n", pslqContext.Relation, pslqContext.RelationNorm)
@@ -404,10 +414,17 @@ func TestGetRImprovingDiagonal(t *testing.T) {
 			relationWorks := pslqContext.TestSolution(pslqContext.Relation)
 			assert.True(t, relationWorks)
 
-			solution, solutionIsCorrect, solutionMatches, solutionNorm := testGetRImprovingDiagonal(
-				t, pslqContext, maxExpectedFinalRatio, whenToImproveDiagonal,
+			v1Output := testGetRImprovingDiagonal(
+				t, pslqContext, whenToImproveDiagonal,
 			)
-			pslqContext.PrintSolution(solution, solutionIsCorrect, solutionMatches, solutionNorm)
+			PrintSolution(
+				v1Output.solution, -1,
+				v1Output.solutionIsCorrect, v1Output.solutionMatches, v1Output.solutionNorm,
+			)
+			PrintMaxEntriesOfD(
+				fmt.Sprintf("strategy is \"%s\"", strategyStr),
+				v1Output.maxInt64DEntry, v1Output.maxBigNumberDEntry,
+			)
 		}
 	}
 }
@@ -415,12 +432,11 @@ func TestGetRImprovingDiagonal(t *testing.T) {
 func testGetRImprovingDiagonal(
 	t *testing.T,
 	pslqContext *PSLQContext,
-	maxExpectedFinalRatio float64,
 	whenToImproveDiagonal int,
-) ([]int64, bool, bool, float64) {
+) v1TestOutput { // ([]int64, bool, bool, float64) {
 	// Run the algorithm
 	state, err := pslqops.NewState(
-		pslqContext.InputAsDecimalString, "1.5", pslqops.ReductionFull,
+		pslqContext.InputAsDecimalString, "1.5", pslqops.ReductionFull, false,
 	) // gammaStr was "1.16" up to morning of July 24 2023
 	numIterations := 0
 	var getRFunc func(
@@ -479,18 +495,20 @@ func testGetRImprovingDiagonal(
 	fmt.Printf("\nTerminated after %d iterations\n", numIterations)
 
 	// Print the diagonal
-	var diagonal []*bignumber.BigNumber
-	var ratioLargestToLastPtr *float64
-	diagonal, ratioLargestToLastPtr, err = state.GetDiagonal()
-	PrintDiagonal("Last diagonal before termination", diagonal, ratioLargestToLastPtr)
+	var diagonalStatistics *pslqops.DiagonalStatistics
+	diagonalStatistics, err = state.GetDiagonal()
+	assert.NoError(t, err)
+	PrintDiagonal("Last diagonal before termination", diagonalStatistics)
 
 	// Verify the solution
-	var solution []int64
-	solution, err = state.GetColumnOfB(state.NumRows() - 1)
-	solutionNorm := SolutionNorm(solution)
-	isCorrect := pslqContext.TestSolution(solution)
-	matches := pslqContext.SolutionMatchesRelation(solution)
-	return solution, isCorrect, matches, solutionNorm
+	var retVal v1TestOutput
+	retVal.solution, err = state.GetColumnOfB(state.NumRows() - 1)
+	retVal.solutionNorm = SolutionNorm(retVal.solution)
+	retVal.solutionIsCorrect = pslqContext.TestSolution(retVal.solution)
+	retVal.solutionMatches = pslqContext.SolutionMatchesRelation(retVal.solution)
+	retVal.maxInt64DEntry = state.GetMaxInt64DMatrixEntry()
+	retVal.maxBigNumberDEntry = state.GetMaxBigNumberDMatrixEntry()
+	return retVal
 }
 
 func getExpectedJABCD(

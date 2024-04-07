@@ -2,10 +2,9 @@ package pslqops
 
 import (
 	"fmt"
-	"math"
-
 	"github.com/predrag3141/PSLQ/bigmatrix"
 	"github.com/predrag3141/PSLQ/bignumber"
+	"math"
 )
 
 // This module provides data structures strategies can use as primitives.
@@ -290,7 +289,7 @@ func getGeneralRowOperation(
 			"GetNextRowOperation: could not divide by %s: %q", vSqAsStr, err.Error(),
 		)
 	}
-	maxBSqPtr := uSqOverVSqPlusOne.RoundTowardsZero()
+	maxBSqPtr := uSqOverVSqPlusOne.Int64RoundTowardsZero()
 	if maxBSqPtr == nil {
 		// Returning a nil score and nil error indicates no error, but no general row
 		// operation either.
@@ -387,44 +386,45 @@ type BottomRightOfH struct {
 // matrix whose upper-left element is t.
 // @formatter:on
 func GetBottomRightOfH(h *bigmatrix.BigMatrix) (*BottomRightOfH, error) {
-	numRows, numCols := h.Dimensions()
-	retVal := &BottomRightOfH{
-		Found:        false,
-		T:            nil,
-		RowNumberOfT: 0,
-		U:            nil,
-		RowNumberOfU: h.NumCols(),
+	numRows := h.NumRows()
+	lastNonZero, err := getLastNonZero(h, "GetBottomRightOfH")
+	if err != nil {
+		return nil, err
 	}
-	for colNbr := numCols - 1; colNbr > 0; colNbr-- {
-		// Continue to the next column if u is small (essentially zero)
-		putativeU, err := h.Get(numRows-1, colNbr)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"GetBottomRightOfH: could not get H[%d][%d]: %q", numRows-1, colNbr, err.Error(),
-			)
-		}
-		if putativeU.IsSmall() {
-			continue
-		}
-
-		// u is not essentially zero, so the bottom-right of H has been found
-		var t *bignumber.BigNumber
-		retVal.Found = true
-		retVal.RowNumberOfT = colNbr
-		t, err = h.Get(colNbr, colNbr)
-		retVal.T = bignumber.NewFromInt64(0).Set(t)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"GetBottomRightOfH: could not get H[%d][%d]: %q", colNbr, colNbr, err.Error(),
-			)
-		}
-		retVal.U = bignumber.NewFromInt64(0).Set(putativeU)
-		return retVal, nil
+	if lastNonZero < 0 {
+		//  There is no bottom-right of H in need of reduction. This is indicated
+		//	by the fact that Found == false in the returned value.
+		return &BottomRightOfH{
+			Found:        false,
+			T:            nil,
+			RowNumberOfT: 0,
+			U:            nil,
+			RowNumberOfU: h.NumCols(),
+		}, nil
 	}
 
-	// Though unlikely, the case has been reached where all but the first entry of the last
-	// row is essentially zero. retVal.Found is still false to indicate this situation.
-	return retVal, nil
+	// Since lastNonZero is non-negative, there is a bottom-right of H in need of reduction in column
+	// lastNonZero.
+	var t, u *bignumber.BigNumber
+	t, err = h.Get(lastNonZero, lastNonZero)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"GetBottomRightOfH: could not get H[%d][%d]: %q", lastNonZero, lastNonZero, err.Error(),
+		)
+	}
+	u, err = h.Get(numRows-1, lastNonZero)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"GetBottomRightOfH: could not get H[%d][%d]: %q", numRows-1, lastNonZero, err.Error(),
+		)
+	}
+	return &BottomRightOfH{
+		Found:        true,
+		T:            bignumber.NewFromInt64(0).Set(t),
+		RowNumberOfT: lastNonZero,
+		U:            bignumber.NewFromInt64(0).Set(u),
+		RowNumberOfU: numRows - 1,
+	}, nil
 }
 
 // Reduce returns a non-nil row operation and nil error, or vice versa. The row operation
@@ -512,6 +512,74 @@ func (hps *HPairStatistics) GetScore() float64 {
 // in order). The row swap matrix is its own inverse.
 func (hps *HPairStatistics) GetIndicesAndSubMatrix() ([]int, []int) {
 	return []int{hps.j0, hps.j1}, []int{0, 1, 1, 0}
+}
+
+type DiagonalStatistics struct {
+	Diagonal    []*bignumber.BigNumber
+	Correlation *float64
+	Ratio       *float64
+}
+
+func NewDiagonalStatistics(h *bigmatrix.BigMatrix) (*DiagonalStatistics, error) {
+	// Initializations
+	numCols := h.NumCols()
+	var err error
+	retVal := &DiagonalStatistics{
+		Diagonal:    make([]*bignumber.BigNumber, numCols),
+		Correlation: nil,
+		Ratio:       nil,
+	}
+	norm := bignumber.NewFromInt64(0)                   // L2 norm of the diagonal
+	rawCorrelation := bignumber.NewFromInt64(0)         // Raw correlation of the diagonal to (1,2,3,...,numCols)
+	largestDiagonalElement := bignumber.NewFromInt64(0) // Largest diagonal element of H
+
+	// Iterate through the diagonal of H, updating norm, rawCorrelation and largestDiagonalElement
+	for i := 0; i < numCols; i++ {
+		var retValI *bignumber.BigNumber
+		retValI, err = h.Get(i, i)
+		if err != nil {
+			return retVal, fmt.Errorf("GetDiagonal: could not get H[%d][%d]: %q", i, i, err.Error())
+		}
+		retVal.Diagonal[i] = bignumber.NewFromInt64(0).Set(retValI)
+		absRetVal := bignumber.NewFromInt64(0).Abs(retValI)
+		if absRetVal.Cmp(largestDiagonalElement) > 0 {
+			largestDiagonalElement.Set(absRetVal)
+		}
+		rawCorrelation.MulAdd(bignumber.NewFromInt64(int64(i+1)), absRetVal)
+		norm.MulAdd(absRetVal, absRetVal)
+	}
+
+	// Put the largest-to-last ratio in the struct to be returned, if possible.
+	var ratioAsBigNumber *bignumber.BigNumber
+	ratioAsBigNumber, err = bignumber.NewFromInt64(0).Quo(
+		largestDiagonalElement, retVal.Diagonal[numCols-1],
+	)
+	if err != nil {
+		_, l0 := largestDiagonalElement.String()
+		_, r0 := retVal.Diagonal[numCols-1].String()
+		return retVal, fmt.Errorf("GetDiagonal: could compute %q/%q: %q", l0, r0, err.Error())
+	}
+	ratioAsFloat := ratioAsBigNumber.AsFloat()
+	ratioAsFloat64, _ := ratioAsFloat.Float64()
+	if !math.IsInf(ratioAsFloat64, 0) {
+		ratioAsFloat64 = math.Abs(ratioAsFloat64)
+		retVal.Ratio = &ratioAsFloat64
+	}
+
+	// Put the correlation of the diagonal with (1,2,3,...,numCols) in the struct to be returned,
+	// if possible.
+	rawCorrelationAsFloat := rawCorrelation.AsFloat()
+	rawCorrelationAsFloat64, _ := rawCorrelationAsFloat.Float64()
+	normAsFloat := norm.AsFloat()
+	normAsFloat64, _ := normAsFloat.Float64()
+	if !math.IsInf(rawCorrelationAsFloat64, 0) && !math.IsInf(normAsFloat64, 0) {
+		// Sum of squares from 1 to n is [n(n+1)(2n+1)]/6
+		correlation := rawCorrelationAsFloat64 / (math.Sqrt(normAsFloat64) * math.Sqrt(float64(numCols*(numCols+1)*(2*numCols+1))/6))
+		retVal.Correlation = &correlation
+	}
+
+	// Return the diagonal, and potentially the statistics that go with it
+	return retVal, nil
 }
 
 // getHPairStatistics returns an array, hp, of HPairStatistics and the index i into hp

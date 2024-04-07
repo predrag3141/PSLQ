@@ -4,11 +4,10 @@ package pslqops
 
 import (
 	"fmt"
-	"math"
-
 	"github.com/predrag3141/PSLQ/bigmatrix"
 	"github.com/predrag3141/PSLQ/bignumber"
 	"github.com/predrag3141/PSLQ/util"
+	"math"
 )
 
 const (
@@ -16,129 +15,319 @@ const (
 	makeTSmallerThanU
 )
 
-// GetInt64D returns a row operation matrix that reduces a lower quadrangular matrix like
-// the matrix H in the original PSLQ paper. It returns
-// - Whether the reduction matrix contains a large element
+// GetInt64D populates a row operation matrix "dInt64Matrix" that reduces a lower
+// quadrangular matrix like the matrix H in the original PSLQ paper. It returns
+//
+// - The maximum element of dInt64Matrix
+//
 // - Whether the reduction matrix is the identity
+//
+//   - Whether GetInt64D calculated an all-zero row (left of the diagonal element),
+//     in spite of detecting the need to change the row. This is wasteful but not an error,
+//     because it can happen due to round-off.
+//
 // - Any error encountered.
 //
-// GetInt64D operates in three modes
-// - Full reduction
-// - All but the last row
-// - Gentle reduction.
-//
-// In full reduction mode, GetInt64D returns the integer array that best emulates the ability
-// of a floating point matrix D for which DH equals the diagonal of H on its diagonal, but DH
-// is 0 elsewhere. Such a floating point matrix is derived in section 2.2 of "A Gentle
-// Introduction to PSLQ" https://arminstraub.com/downloads/math/pslq.pdf
-//
-// In all but last row mode, full reduction is applied to all but the last row, which is left
-// unchanged.
-//
-// In gentle reduction mode -- used in strategies that prioritize keeping row n populated
-// with non-zero elements -- GetInt64D simply ensures that elements of the sub-diagonal of
-// H are at most half the size of the diagonal elements directly above them. In partial
-// reduction mode, the last row of H is left unchanged.
-func GetInt64D(h *bigmatrix.BigMatrix, reductionMode int) ([]int64, int64, bool, error) {
+// Entries below the diagonal of DH are bounded by the absolute value of the diagonal
+// element above them, multiplied by .5+[gentle reduction mode].
+func GetInt64D(
+	h *bigmatrix.BigMatrix,
+	reductionMode int, gentlyReduceAllRows bool,
+	dInt64Matrix []int64,
+) (
+	*bignumber.BigNumber, bool, bool, error,
+) {
 	// Initializations
-	var maxEntry int64
-	isIdentity := true
 	numRows := h.NumRows()
-	numRowsToReduce := numRows
-	dMatrix := make([]int64, numRows*numRows)
-	if reductionMode != ReductionFull {
-		numRowsToReduce = h.NumRows() - 1
-		dMatrix[numRows*numRows-1] = 1
+	half := bignumber.NewPowerOfTwo(-1)
+	halfPlusReductionModeAsBigNumber := bignumber.NewFromInt64(0).Add(
+		half, bignumber.NewFromInt64(int64(reductionMode)),
+	)
+	halfPlusReductionModeAsFloat64 := float64(reductionMode) + .5
+	maxEntryOfD := int64(1) // since the diagonal of D has 1s!
+	isIdentity := true
+	calculatedAllZeroRow := false
+	columnThreshGentle, columnThreshFull, err := getColumnThresholds(
+		h, halfPlusReductionModeAsBigNumber, "GetBigNumberD",
+	)
+	if err != nil {
+		return bignumber.NewFromInt64(maxEntryOfD), isIdentity, calculatedAllZeroRow, err
 	}
 
 	// Compute ratios of elements below the diagonal of H and the diagonal elements above them.
 	hkjOverHjj, err := getRatios(h)
 	if err != nil {
-		return []int64{}, maxEntry, false, err
+		return bignumber.NewFromInt64(maxEntryOfD), isIdentity, calculatedAllZeroRow, err
 	}
 
 	// hkjOverHjj is now a lookup table for H[k][j] / H[j][j] in the formula,
 	// D[i][j] = sum over k=j+1,...,i of (D[i][k] H[k][j]) / H[j][j]
-	currentRow := make([]int64, numRows)
-	dMatrix[0] = 1 // needed since the row loop below starts at i == 1
-	for i := 1; i < numRowsToReduce; i++ {
-		// Populate currentRow and set the flag for using it in gentle reduction mode
-		currentRow[i] = 1
-		useCurrentRowInGentleMode := false
-		minCol := 0
-		if reductionMode == ReductionSubDiagonal {
-			minCol = i - 1
+	for i := 0; i < numRows; i++ {
+		// Set the diagonal element to 1. Also, zero out the entries above the diagonal, because
+		// there is no guarantee that D comes into this function as a lower-triangular matrix. For
+		// example, int64DToRD may have set some entries above the diagonal to non-zero.
+		dInt64Matrix[i*numRows+i] = 1
+		for j := i + 1; j < numRows; j++ {
+			dInt64Matrix[i*numRows+j] = 0
 		}
-		for j := i - 1; minCol <= j; j-- {
+
+		// Skip rows that do not need reduction
+		reduceRow := false
+		if i > 0 {
+			reduceRow, _, err = rowNeedsReduction(
+				h, columnThreshGentle, columnThreshFull, gentlyReduceAllRows, i, 0, "GetInt64D",
+			)
+		}
+		if !reduceRow {
+			for j := 0; j < i; j++ {
+				dInt64Matrix[i*numRows+j] = 0
+			}
+			continue
+		}
+
+		// Recursive calculation of this row.
+		//
+		// leftMostFullReductionColumn is the left-most column for which reduction mode is
+		// forced to zero (full reduction). For most rows, this is i-1. For the last row, there
+		// is an edge case to take into account: an infinite loop where multiplying by D
+		// replaces a zero with a non-zero in PSLQ step 1, but reduction of diagonal and last-
+		// row elements in step 3 puts that zero right back where it was. Full reduction never
+		// replaces a zero with non-zero, so it is used in the last row, starting (from the left)
+		// with the first zero with only zeroes to its right.
+		leftMostFullReductionColumn := 0
+		if gentlyReduceAllRows {
+			leftMostFullReductionColumn = i - 1
+		}
+		if i == numRows-1 {
+			leftMostFullReductionColumn, err = getLastNonZero(h, "GetInt64D")
+			if err != nil {
+				return bignumber.NewFromInt64(maxEntryOfD), isIdentity, calculatedAllZeroRow, err
+			}
+			leftMostFullReductionColumn++ // start full reduction at the leftmost consecutive zero
+		}
+		rowIsAllZero := true
+		for j := i - 1; 0 <= j; j-- {
 			var dEntryAsFloat64 float64
 			for k := j + 1; k <= i; k++ {
-				dEntryAsFloat64 -= float64(currentRow[k]) * hkjOverHjj[k*numRows+j]
+				dEntryAsFloat64 -= float64(dInt64Matrix[i*numRows+k]) * hkjOverHjj[k*numRows+j]
 			}
 			if math.IsInf(dEntryAsFloat64, 0) {
-				return []int64{}, maxEntry, false, fmt.Errorf("GetInt64D: dMatrix[%d][%d] is infinite", i, j)
+				return bignumber.NewFromInt64(maxEntryOfD), isIdentity, calculatedAllZeroRow,
+					fmt.Errorf("GetInt64D: dMatrix[%d][%d] is infinite", i, j)
 			}
 			var dMatrixEntry int64
+			offset := halfPlusReductionModeAsFloat64
+			if leftMostFullReductionColumn <= j {
+				offset = 0.5
+			}
 			if dEntryAsFloat64 < 0.0 {
-				dMatrixEntry = -int64(0.5 - dEntryAsFloat64)
+				dMatrixEntry = -int64(offset - dEntryAsFloat64)
+				if -dMatrixEntry > maxEntryOfD {
+					maxEntryOfD = -dMatrixEntry
+				}
 			} else {
-				dMatrixEntry = int64(0.5 + dEntryAsFloat64)
-			}
-			currentRow[j] = dMatrixEntry
-			if (dMatrixEntry > gentleReductionModeThresh) || (-dMatrixEntry > gentleReductionModeThresh) {
-				useCurrentRowInGentleMode = true
-			}
-		}
-
-		// Use currentRow to populate the current row of dMatrix.
-		dMatrix[i*numRows+i] = 1
-		if (reductionMode == ReductionGentle) && !useCurrentRowInGentleMode {
-			// minCol needs to be increased to match what it is for ReductionSubDiagonal,
-			// because there is no entry in currentRow large enough to trigger its usage.
-			minCol = i - 1
-		}
-		for j := minCol; j < i; j++ {
-			if currentRow[j] != 0 {
-				dMatrixEntry := currentRow[j]
-				dMatrix[i*numRows+j] = dMatrixEntry
-				isIdentity = false
-				if dMatrixEntry > maxEntry {
-					maxEntry = dMatrixEntry
-				} else if -dMatrixEntry > maxEntry {
-					maxEntry = -dMatrixEntry
+				dMatrixEntry = int64(offset + dEntryAsFloat64)
+				if dMatrixEntry > maxEntryOfD {
+					maxEntryOfD = dMatrixEntry
 				}
 			}
+			if dMatrixEntry != 0 {
+				isIdentity = false
+				rowIsAllZero = false
+			}
+			dInt64Matrix[i*numRows+j] = dMatrixEntry
+		}
+		if rowIsAllZero {
+			// Since this row of H needed reduction, it should be reported that this
+			// row of D has only zeroes (other than the diagonal element, of course).
+			// This is not an error, since it can happen due to round-off.
+			calculatedAllZeroRow = true
 		}
 	}
-	return dMatrix, maxEntry, isIdentity, nil
+	return bignumber.NewFromInt64(maxEntryOfD), isIdentity, calculatedAllZeroRow, nil
 }
 
-func printInt64Matrix(name string, x []int64, numRows, numCols int) {
-	blanks := "         "
-	fmt.Printf("%s:\n%s", name, blanks)
+// GetBigNumberD returns a row operation matrix, D, that reduces a lower quadrangular matrix
+// like the matrix H in the original PSLQ paper. It returns
+//
+// - The maximum element of dInt64Matrix
+//
+// - Whether the reduction matrix is the identity
+//
+//   - Whether GetBigNumberD calculated an all-zero row (left of the diagonal element),
+//     in spite of detecting the need to change the row. This is wasteful but not an error,
+//     because it can happen due to round-off.
+//
+// - Any error encountered.
+//
+// Entries below the diagonal of DH are bounded by the absolute value of the diagonal
+// element above them, multiplied by .5+[gentle reduction mode].
+func GetBigNumberD(
+	h *bigmatrix.BigMatrix,
+	reductionMode int, gentlyReduceAllRows bool,
+	dBigNumberMatrix *bigmatrix.BigMatrix,
+) (*bignumber.BigNumber, bool, bool, error) {
+	// Initializations
+	numRows, numCols := h.Dimensions()
+	one := bignumber.NewFromInt64(1)
+	zero := bignumber.NewFromInt64(0)
+	half := bignumber.NewPowerOfTwo(-1)
+	halfPlusReductionMode := bignumber.NewFromInt64(0).Add(
+		half, bignumber.NewFromInt64(int64(reductionMode)),
+	)
+	maxEntryOfD := bignumber.NewFromInt64(1) // since the diagonal of D has 1s!
+	isIdentity := true
+	calculatedAllZeroRow := false
+	columnThreshGentle, columnThreshFull, err := getColumnThresholds(
+		h, halfPlusReductionMode, "GetBigNumberD",
+	)
+
+	// Get 1/H[i][i] for all i
+	reciprocalDiagonal := make([]*bignumber.BigNumber, numCols)
+	for j := 0; j < numCols; j++ {
+		hJJ, err := h.Get(j, j)
+		if err != nil {
+			return nil, isIdentity, calculatedAllZeroRow,
+				fmt.Errorf("GetBigNumberD: could not get H[%d][%d]: %q", j, j, err.Error())
+		}
+		reciprocalDiagonal[j], err = bignumber.NewFromInt64(0).Quo(one, hJJ)
+	}
+
+	// Compute D
 	for i := 0; i < numRows; i++ {
-		for j := 0; j < numCols; j++ {
-			fmt.Printf(" %5d", x[i*numCols+j])
+		// Set the diagonal element to 1. Also, zero out the entries above the diagonal, because
+		// there is no guarantee that D comes into this function as a lower-triangular matrix. For
+		// example, bigNumberDToRD may have set some entries above the diagonal to non-zero.
+		err = dBigNumberMatrix.Set(i, i, one)
+		if err != nil {
+			return maxEntryOfD, isIdentity, calculatedAllZeroRow,
+				fmt.Errorf("GetBigNumerD: could not set H[%d][%d]: %q", i, i, err.Error())
 		}
-		fmt.Printf("\n")
-		if i < numRows-1 {
-			fmt.Printf("%s", blanks)
+		for j := i + 1; j < numRows; j++ {
+			err = dBigNumberMatrix.Set(i, j, zero)
+			if err != nil {
+				return maxEntryOfD, isIdentity, calculatedAllZeroRow,
+					fmt.Errorf("GetBigNumerD: could not set H[%d][%d]: %q", i, j, err.Error())
+			}
+		}
+
+		// Skip rows that do not need reduction
+		reduceRow := false
+		if i > 0 {
+			reduceRow, _, err = rowNeedsReduction(
+				h, columnThreshGentle, columnThreshFull, gentlyReduceAllRows, i, 0, "GetBigNumberD",
+			)
+			if err != nil {
+				return maxEntryOfD, isIdentity, calculatedAllZeroRow, err
+			}
+		}
+		if !reduceRow {
+			for j := 0; j < i; j++ {
+				err = dBigNumberMatrix.Set(i, j, zero)
+				if err != nil {
+					return nil, isIdentity, calculatedAllZeroRow,
+						fmt.Errorf("GetBigNumerD: could not set H[%d][%d]: %q", i, j, err.Error())
+				}
+			}
+			continue
+		}
+
+		// leftMostFullReductionColumn is the left-most column for which reduction mode is
+		// forced to zero (full reduction). For most rows, this is i-1. For the last row, there
+		// is an edge case to take into account: an infinite loop where multiplying by D
+		// replaces a zero with a non-zero in PSLQ step 1, but reduction of diagonal and last-
+		// row elements in step 3 puts that zero right back where it was. Full reduction never
+		// replaces a zero with non-zero, so it is used in the last row, starting (from the left)
+		// with the first entry with only zeroes to its right.
+		leftMostFullReductionColumn := 0
+		if gentlyReduceAllRows {
+			leftMostFullReductionColumn = i - 1
+		}
+		if i == numRows-1 {
+			leftMostFullReductionColumn, err = getLastNonZero(h, "GetBigNumberD")
+			if err != nil {
+				return maxEntryOfD, isIdentity, calculatedAllZeroRow, err
+			}
+			leftMostFullReductionColumn++ // start full reduction at the leftmost consecutive zero
+		}
+		rowIsAllZero := true
+		for j := i - 1; 0 <= j; j-- {
+			// Initially, compute the entry in D, except not rounded to the nearest integer
+			dMatrixEntry := bignumber.NewFromInt64(0)
+			for k := j + 1; k <= i; k++ {
+				var dIK, hKJ *bignumber.BigNumber
+				dIK, err = dBigNumberMatrix.Get(i, k)
+				if err != nil {
+					return nil, isIdentity, calculatedAllZeroRow,
+						fmt.Errorf("GetBigNumerD: could not get D[%d][%d]: %q", i, k, err.Error())
+				}
+				hKJ, err = h.Get(k, j)
+				if err != nil {
+					return nil, isIdentity, calculatedAllZeroRow,
+						fmt.Errorf("GetBigNumerD: could not get H[%d][%d]: %q", k, j, err.Error())
+				}
+				hKJOverHJJ := bignumber.NewFromInt64(0).Mul(hKJ, reciprocalDiagonal[j])
+				dIKHKJOverHJJ := bignumber.NewFromInt64(0).Mul(dIK, hKJOverHJJ)
+				dMatrixEntry.Sub(dMatrixEntry, dIKHKJOverHJJ)
+			}
+
+			// Next, round the entry to the nearest integer, plus or minus the reduction mode. This
+			// is the entry to put in D[i][j] that reduces |H[i][j]| to as close as possible to
+			// reduction mode times |H[i][i]|. When you know whether entry is negative or positive,
+			// use that to update the maximum entry of D.
+			offset := halfPlusReductionMode
+			if leftMostFullReductionColumn <= j {
+				offset = half
+			}
+			if dMatrixEntry.Cmp(zero) > 0 {
+				dMatrixEntry.Add(dMatrixEntry, offset)
+				dMatrixEntry.RoundTowardsZero()
+				if dMatrixEntry.Cmp(maxEntryOfD) > 0 {
+					maxEntryOfD.Set(dMatrixEntry)
+				}
+			} else {
+				dMatrixEntry.Sub(dMatrixEntry, offset)
+				dMatrixEntry.RoundTowardsZero()
+				absEntry := bignumber.NewFromInt64(0).Abs(dMatrixEntry)
+				if absEntry.Cmp(maxEntryOfD) > 0 {
+					maxEntryOfD.Set(absEntry)
+				}
+			}
+			if !dMatrixEntry.IsZero() {
+				isIdentity = false
+				rowIsAllZero = false
+			}
+
+			// Set D[i][j]
+			err = dBigNumberMatrix.Set(i, j, dMatrixEntry)
+			if err != nil {
+				return nil, isIdentity, calculatedAllZeroRow,
+					fmt.Errorf("GetBigMatrixD: could not set D[%d][%d]: %q", i, j, err.Error())
+			}
+		}
+		if rowIsAllZero {
+			// Since this row of H needed reduction, it should be reported that this
+			// row of D has only zeroes (other than the diagonal element, of course).
+			// This is not an error, since it can happen due to round-off.
+			calculatedAllZeroRow = true
 		}
 	}
+	return maxEntryOfD, isIdentity, calculatedAllZeroRow, nil
 }
 
-// GetInt64E returns the inverse of dMatrix, provided that dMatrix is a lower
+// GetInt64E returns the inverse of dInt64Matrix, provided that dInt64Matrix is a lower
 // triangular matrix with 1s on its diagonal. GetInt64E also returns whether
 // there is an entry that exceeds math.MaxInt32 / numRows, an indication that
 // it is time to switch over to BigNumber forms of D, E, A and B.
 //
-// dMatrix and eMatrix are interpreted as matrices by filling their rows in
-// order with the elements of dMatrix []int64 and eMatrix []int64.
-func GetInt64E(dMatrix []int64, numRows int) ([]int64, bool, error) {
+// dInt64Matrix and eMatrix are interpreted as matrices by filling their rows in
+// order with the elements of dInt64Matrix []int64 and eMatrix []int64.
+func GetInt64E(dInt64Matrix []int64, numRows int) ([]int64, bool, error) {
 	largeEntryThresh := int64(math.MaxInt32 / numRows)
 	hasLargeEntry := false
-	if len(dMatrix) != numRows*numRows {
+	if len(dInt64Matrix) != numRows*numRows {
 		return []int64{}, false, fmt.Errorf(
-			"GetInt64E: len(dMatrix) = %d != %d * %d", len(dMatrix), numRows, numRows,
+			"GetInt64E: len(dInt64Matrix) = %d != %d * %d", len(dInt64Matrix), numRows, numRows,
 		)
 	}
 	if numRows <= 0 {
@@ -150,7 +339,7 @@ func GetInt64E(dMatrix []int64, numRows int) ([]int64, bool, error) {
 		for j := i - 1; 0 <= j; j-- {
 			var eEntry int64
 			for k := j + 1; k <= i; k++ {
-				eEntry -= eMatrix[i*numRows+k] * dMatrix[k*numRows+j] // -= eMatrix[i][k] dMatrix[k][j]
+				eEntry -= eMatrix[i*numRows+k] * dInt64Matrix[k*numRows+j] // -= eMatrix[i][k] dInt64Matrix[k][j]
 			}
 			if (eEntry > largeEntryThresh) || (eEntry < -largeEntryThresh) {
 				hasLargeEntry = true
@@ -161,14 +350,9 @@ func GetInt64E(dMatrix []int64, numRows int) ([]int64, bool, error) {
 	return eMatrix, hasLargeEntry, nil
 }
 
-// GetBigNumberE returns the inverse of eMatrix, provided that eMatrix
+// GetBigNumberE returns the inverse of eMatrix, provided that dBigNumberMatrix
 // is lower triangular with 1s on the diagonal.
-func GetBigNumberE(dMatrix []int64, numRows int) (*bigmatrix.BigMatrix, error) {
-	if len(dMatrix) != numRows*numRows {
-		return nil, fmt.Errorf(
-			"GetBigNumberE: len(dMatrix) = %d != %d * %d", len(dMatrix), numRows, numRows,
-		)
-	}
+func GetBigNumberE(dBigNumberMatrix *bigmatrix.BigMatrix, numRows int) (*bigmatrix.BigMatrix, error) {
 	eMatrix, err := bigmatrix.NewIdentity(numRows)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -176,17 +360,21 @@ func GetBigNumberE(dMatrix []int64, numRows int) (*bigmatrix.BigMatrix, error) {
 			numRows, err.Error(),
 		)
 	}
+	zero := bignumber.NewFromInt64(0)
 	for i := 0; i < numRows; i++ {
 		for j := i - 1; 0 <= j; j-- {
 			eEntry := bignumber.NewFromInt64(0)
 			for k := j + 1; k <= i; k++ {
-				eIK, err := eMatrix.Get(i, k)
+				var eIK, dKJ *bignumber.BigNumber
+				eIK, err = eMatrix.Get(i, k)
 				if err != nil {
 					return nil, fmt.Errorf(
 						"GetBigNumberE: could not get E[%d][%d]: %q", i, k, err.Error(),
 					)
 				}
-				eEntry.Int64MulAdd(-dMatrix[k*numRows+j], eIK)
+				dKJ, err = dBigNumberMatrix.Get(k, j)
+				minusDkj := bignumber.NewFromInt64(0).Sub(zero, dKJ)
+				eEntry.MulAdd(minusDkj, eIK)
 			}
 			err = eMatrix.Set(i, j, eEntry)
 			if err != nil {
@@ -199,20 +387,19 @@ func GetBigNumberE(dMatrix []int64, numRows int) (*bigmatrix.BigMatrix, error) {
 	return eMatrix, nil
 }
 
-// ReduceH reduces h by left-multiplying it by the reduction matrix,
-// dMatrix. dMatrix should have been obtained by calling GetD(h).
-func ReduceH(h *bigmatrix.BigMatrix, dMatrix []int64) error {
+// Int64ReduceH reduces h by left-multiplying it by the reduction matrix,
+// dInt64Matrix. dInt64Matrix should have been obtained by calling GetInt64D(h).
+func Int64ReduceH(h *bigmatrix.BigMatrix, dInt64Matrix []int64) error {
 	numRows, numCols := h.Dimensions()
-	if len(dMatrix) != numRows*numRows {
+	if len(dInt64Matrix) != numRows*numRows {
 		return fmt.Errorf(
-			"ReduceH: invalid length %d of %d x %d matrix dMatrix",
-			len(dMatrix), numRows, numRows,
+			"ReduceH: invalid length %d of %d x %d matrix dInt64Matrix",
+			len(dInt64Matrix), numRows, numRows,
 		)
 	}
 
 	newEntries := make([]*bignumber.BigNumber, ((numRows+2)*numCols)/2)
 	cursor := 0
-	//receiver := bignumber.NewFromInt64(0)
 	for i := 0; i < numRows; i++ {
 		for j := 0; j <= i && j < numCols; j++ {
 			// D[i][k] == 0 if k > i and H[k][j] == 0 if j > k
@@ -227,7 +414,53 @@ func ReduceH(h *bigmatrix.BigMatrix, dMatrix []int64) error {
 				newEntries[cursor] = hij
 			} else {
 				partialEntry, err := bigmatrix.Int64DotProduct(
-					dMatrix, numRows, h, i, j, 0, i, true,
+					dInt64Matrix, numRows, h, i, j, 0, i, true,
+				)
+				if err != nil {
+					return fmt.Errorf("ReduceH: error in Int64DotProduct: %q", err.Error())
+				}
+				newEntries[cursor] = partialEntry.Add(partialEntry, hij)
+			}
+			cursor++
+		}
+	}
+
+	// newEntries now contains the possibly-non-zero elements of the updated H
+	cursor = 0
+	for i := 0; i < numRows; i++ {
+		for j := 0; j <= i && j < numCols; j++ {
+			err := h.Set(i, j, newEntries[cursor])
+			if err != nil {
+				return fmt.Errorf("ReduceH: could not set H[%d][%d]", i, j)
+			}
+			cursor++
+		}
+	}
+	return nil
+}
+
+// BigNumberReduceH reduces h by left-multiplying it by the reduction matrix,
+// dBigNumberMatrix. dBigNumberMatrix should have been obtained by calling GetD(h).
+func BigNumberReduceH(h *bigmatrix.BigMatrix, dBigNumberMatrix *bigmatrix.BigMatrix) error {
+	numRows, numCols := h.Dimensions()
+	newEntries := make([]*bignumber.BigNumber, ((numRows+2)*numCols)/2)
+	cursor := 0
+	for i := 0; i < numRows; i++ {
+		for j := 0; j <= i && j < numCols; j++ {
+			// D[i][k] == 0 if k > i and H[k][j] == 0 if j > k
+			// So unless k <= i and j <= k, D[i][k] H[k][j] == 0
+			// Therefore, the loop below is for k = j; k <=i; k++.
+			// Also, D[i][i] H[i][j] is just H[i][j] since D has 1s on the diagonal
+			hij, err := h.Get(i, j)
+			if err != nil {
+				return fmt.Errorf("ReduceH: could not get H[%d][%d]", i, j)
+			}
+			if i == 0 {
+				newEntries[cursor] = hij
+			} else {
+				var partialEntry *bignumber.BigNumber
+				partialEntry, err = bigmatrix.DotProduct(
+					dBigNumberMatrix, h, i, j, 0, i, true,
 				)
 				if err != nil {
 					return fmt.Errorf("ReduceH: error in Int64DotProduct: %q", err.Error())
@@ -255,39 +488,41 @@ func ReduceH(h *bigmatrix.BigMatrix, dMatrix []int64) error {
 // UpdateInt64A left-multiplies A -- represented by bMatrix --  by RD. Here R is the
 // numRows x numRows identity matrix, except in the 2x2 sub-matrix with upper-left
 // corner at (j, j), where R is formed by the rows [a,b] and [c,d]. D is the
-// numRows x numRows matrix represented by the variable dMatrix, obtained by GetInt64D.
+// numRows x numRows matrix represented by the variable dInt64Matrix, obtained by GetInt64D.
 //
 // Updates to aMatrix are done in-place. Return values are:
 //
 // whether a large entry -- greater than math.MaxInt32 / numRows -- was created in A
 //
 // An error in the event of discrepancies between dimensions
-func UpdateInt64A(aMatrix, dMatrix []int64, numRows int, rowOperation *RowOperation) (bool, error) {
+func UpdateInt64A(aMatrix, dInt64Matrix []int64, numRows int, rowOperation *RowOperation) (bool, error) {
 	hasLargeEntry := false
 	largeEntryThresh := int64(math.MaxInt32 / numRows)
 	expectedLength := numRows * numRows
 	if len(aMatrix) != expectedLength {
-		return false, fmt.Errorf("UpdateInt64A: len(aMatrix) == %d != %d = expected length",
-			len(aMatrix), expectedLength)
+		return false, fmt.Errorf(
+			"UpdateInt64A: len(aMatrix) == %d != %d = expected length", len(aMatrix), expectedLength,
+		)
 	}
-	if len(dMatrix) != expectedLength {
-		return false, fmt.Errorf("UpdateInt64A: len(dMatrix) == %d != %d = expected length",
-			len(dMatrix), expectedLength)
+	if len(dInt64Matrix) != expectedLength {
+		return false, fmt.Errorf(
+			"UpdateInt64A: len(dInt64Matrix) == %d != %d = expected length", len(dInt64Matrix), expectedLength,
+		)
 	}
 	err := rowOperation.ValidateAll(numRows, "UpdateInt64A")
 	if err != nil {
 		return false, fmt.Errorf("UpdateInt64A: could not validate rowOperation: %q", err.Error())
 	}
 
-	// First convert dMatrix to RD, then left-multiply A by RD. RD is lower triangular with
+	// First convert dInt64Matrix to RD, then left-multiply A by RD. RD is lower triangular with
 	// 1s on its diagonal, except in rows with indices contained in the variable, indices.
-	err = dToRD(dMatrix, numRows, rowOperation)
+	err = int64DToRD(dInt64Matrix, numRows, rowOperation)
 	if err != nil {
 		return false, fmt.Errorf("UpdateInt64A: could not left-multiply by rowOperation: %q", err.Error())
 	}
 	newA := make([]int64, numRows*numRows)
 	for i := 0; i < numRows; i++ {
-		dotLen := i // number of non-diagonal elements in row i of dMatrix that might not be 0
+		dotLen := i // number of non-diagonal elements in row i of dInt64Matrix that might not be 0
 		for _, index := range rowOperation.Indices {
 			if index == i {
 				// D is zero to the right of the diagonal, but row i of RD could be non-zero
@@ -302,11 +537,11 @@ func UpdateInt64A(aMatrix, dMatrix []int64, numRows int, rowOperation *RowOperat
 				newAIK = aMatrix[i*numRows+k]
 			} else if dotLen < numRows {
 				newAIK = util.DotProduct(
-					dMatrix, numRows, aMatrix, numRows, i, k, 0, dotLen,
+					dInt64Matrix, numRows, aMatrix, numRows, i, k, 0, dotLen,
 				) + aMatrix[i*numRows+k]
 			} else {
 				newAIK = util.DotProduct(
-					dMatrix, numRows, aMatrix, numRows, i, k, 0, dotLen,
+					dInt64Matrix, numRows, aMatrix, numRows, i, k, 0, dotLen,
 				)
 			}
 			if (newAIK > largeEntryThresh) || (-newAIK > largeEntryThresh) {
@@ -322,7 +557,7 @@ func UpdateInt64A(aMatrix, dMatrix []int64, numRows int, rowOperation *RowOperat
 }
 
 // UpdateBigNumberA left-multiplies A -- represented by aMatrix -- by the product,
-// RD. D is the numRows x numRows matrix represented by the variable dMatrix,
+// RD. D is the numRows x numRows matrix represented by the variable dBigNumberMatrix,
 // obtained by GetInt64D. R is the expansion of subMatrix into the numRows x numRows
 // identity matrix, injecting entries of subMatrix into entries of the identity indicated
 // by the variable, indices.
@@ -330,16 +565,11 @@ func UpdateInt64A(aMatrix, dMatrix []int64, numRows int, rowOperation *RowOperat
 // Updates to aMatrix are done in-place. The return value is an error in the event of
 // discrepancies between dimensions.
 func UpdateBigNumberA(
-	aMatrix *bigmatrix.BigMatrix,
-	dMatrix []int64,
+	aBigNumberMatrix *bigmatrix.BigMatrix,
+	dBigNumberMatrix *bigmatrix.BigMatrix,
 	numRows int,
 	rowOperation *RowOperation,
 ) error {
-	expectedLength := numRows * numRows
-	if len(dMatrix) != expectedLength {
-		return fmt.Errorf("UpdateInt64A: len(dMatrix) == %d != %d = expected length",
-			len(dMatrix), expectedLength)
-	}
 	err := rowOperation.ValidateAll(numRows, "UpdateBigNumberA")
 	if err != nil {
 		return err
@@ -347,7 +577,7 @@ func UpdateBigNumberA(
 
 	// First convert dMatrix to RD, then left-multiply A by RD. RD is lower triangular with
 	// 1s on its diagonal, except in rows with indices contained in the variable, indices.
-	err = dToRD(dMatrix, numRows, rowOperation)
+	err = bigNumberDToRD(dBigNumberMatrix, numRows, rowOperation)
 	if err != nil {
 		return fmt.Errorf("UpdateBigNumberA: could not left-multiply by rowOperation: %q", err.Error())
 	}
@@ -366,7 +596,7 @@ func UpdateBigNumberA(
 			var newAIK *bignumber.BigNumber
 			if dotLen == 0 {
 				var oldAIK *bignumber.BigNumber
-				oldAIK, err = aMatrix.Get(i, k)
+				oldAIK, err = aBigNumberMatrix.Get(i, k)
 				if err != nil {
 					return fmt.Errorf(
 						"UpdateBigNumberA: could not get A[%d][%d]: %q", i, k, err.Error(),
@@ -374,8 +604,8 @@ func UpdateBigNumberA(
 				}
 				newAIK = bignumber.NewFromBigNumber(oldAIK)
 			} else {
-				newAIK, err = bigmatrix.Int64DotProduct(
-					dMatrix, numRows, aMatrix, i, k, 0, dotLen, true,
+				newAIK, err = bigmatrix.DotProduct(
+					dBigNumberMatrix, aBigNumberMatrix, i, k, 0, dotLen, true,
 				)
 				if err != nil {
 					return fmt.Errorf(
@@ -384,7 +614,7 @@ func UpdateBigNumberA(
 				}
 				if dotLen < numRows {
 					var oldAIK *bignumber.BigNumber
-					oldAIK, err = aMatrix.Get(i, k)
+					oldAIK, err = aBigNumberMatrix.Get(i, k)
 					if err != nil {
 						return fmt.Errorf(
 							"UpdateBigNumberA: could not get A[%d][%d]: %q", i, k, err.Error(),
@@ -398,7 +628,7 @@ func UpdateBigNumberA(
 	}
 	for i := 0; i < numRows; i++ {
 		for j := 0; j < numRows; j++ {
-			err := aMatrix.Set(i, j, newA[i*numRows+j])
+			err = aBigNumberMatrix.Set(i, j, newA[i*numRows+j])
 			if err != nil {
 				return fmt.Errorf(
 					"UpdateBigNumberA: could not set A[%d][%d]: %q", i, j, err.Error(),
@@ -607,11 +837,11 @@ func UpdateXBigNumber(xMatrix, erMatrix *bigmatrix.BigMatrix, rowOperation *RowO
 	return rightMultiplyByBigNumberER(xMatrix, erMatrix, rowOperation.Indices, "UpdateXBigNumber")
 }
 
-// dToRD left-multiplies D in-place by an expansion, R, of subMatrix into the
+// int64DToRD left-multiplies D in-place by an expansion, R, of subMatrix into the
 // numRows x numRows identity matrix, injecting entries of subMatrix into
 // entries of the identity indicated by the variable, indices. D should have
 // been obtained by GetInt64D, and is represented by the variable, dMatrix.
-func dToRD(dMatrix []int64, numRows int, rowOperation *RowOperation) error {
+func int64DToRD(dMatrix []int64, numRows int, rowOperation *RowOperation) error {
 	if rowOperation.IsPermutation() {
 		return permuteRows(dMatrix, numRows, rowOperation.PermutationOfH, "dToRD")
 	}
@@ -643,6 +873,204 @@ func dToRD(dMatrix []int64, numRows int, rowOperation *RowOperation) error {
 	for i := 0; i < numIndices; i++ {
 		for j := 0; j < numRows; j++ {
 			dMatrix[rowOperation.Indices[i]*numRows+j] = newSubMatrixOfD[cursor]
+			cursor++
+		}
+	}
+	return nil
+}
+
+// getColumnThresholds returns the maximum absolute value in each column under gentle and full
+// reduction, respectively; and any error.
+func getColumnThresholds(
+	h *bigmatrix.BigMatrix, halfPlusReductionMode *bignumber.BigNumber, caller string,
+) ([]*bignumber.BigNumber, []*bignumber.BigNumber, error) {
+	// Initializations
+	numCols := h.NumCols()
+	columnThreshGentle := make([]*bignumber.BigNumber, numCols)
+	columnThreshFull := make([]*bignumber.BigNumber, numCols)
+	half := bignumber.NewPowerOfTwo(-1)
+
+	// Set thresholds
+	for j := 0; j < numCols; j++ {
+		hJJ, err := h.Get(j, j)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: could not get H[%d][%d]: %q", caller, j, j, err.Error())
+		}
+		absHJJ := bignumber.NewFromInt64(0).Abs(hJJ)
+		columnThreshGentle[j] = bignumber.NewFromInt64(0).Mul(halfPlusReductionMode, absHJJ)
+		columnThreshFull[j] = bignumber.NewFromInt64(0).Mul(half, absHJJ)
+	}
+	return columnThreshGentle, columnThreshFull, nil
+}
+
+// rowNeedsReduction returns whether H[rowNumber] needs reduction. If any of
+// H[rowNumber][0], ..., H[rowNumber][rowNumber-1] exceeds the threshold for its column, in
+// absolute value, then rowNeedsReduction returns true. Otherwise, rowNeedsReduction
+// returns false.
+//
+// There is an edge case where rowNeedsReduction checks what are already known to be
+// essentially-zero elements of H from a prior call to getLastNonZero. This applies only to
+// row h.NumRows()-1. When implementing the swap-reduce-solve (SRS) strategy, in the vast
+// majority of PSLQ iterations, getLastNonZero reports that the one of the two rightmost
+// entries of the last row of H is not essentially zero. When either of these entries is
+// not essentially zero, rowNeedsReduction -- even without referring to what getLastNonZero
+// returned -- does not check any entries in vain. Other strategies, besides SRS, would
+// probably exhibit similar behavior.
+//
+// When checking for failures to reduce H, as opposed to whether a get*D function should
+// reduce a row of H, it is important to allow a small tolerance for round-off. If log2tolerance
+// is 0 (or more), it is ignored. Otherwise, it takes an extra 2^log2tolerance in the absolute
+// value of an element below the diagonal for it to require reduction.
+func rowNeedsReduction(
+	h *bigmatrix.BigMatrix,
+	columnThreshGentle, columnThreshFull []*bignumber.BigNumber, gentlyReduceAllRows bool,
+	rowNumber, log2tolerance int, caller string,
+) (bool, int, error) {
+	var tolerance *bignumber.BigNumber
+	if log2tolerance < 0 {
+		tolerance = bignumber.NewPowerOfTwo(int64(log2tolerance))
+	}
+
+	// Set the threshold for all columns (except sub-diagonal before the last row, which is
+	// always full reduction).
+	numRows := h.NumRows()
+	columnThresh := columnThreshFull
+	if (rowNumber == numRows-1) || gentlyReduceAllRows {
+		columnThresh = columnThreshGentle
+	}
+
+	// Check whether all elements in the row are bounded by columnThresh.
+	for j := 0; j < rowNumber; j++ {
+		hIJ, err := h.Get(rowNumber, j)
+		if err != nil {
+			return false, -1, fmt.Errorf("%s: could not get H[%d][%d]: %q", caller, rowNumber, j, err.Error())
+		}
+		absHIJ := bignumber.NewFromInt64(0).Abs(hIJ)
+		if tolerance != nil {
+			// Decrease absHIJ before comparing it to the threshold. This avoids false alarms.
+			absHIJ = bignumber.NewFromInt64(0).Sub(absHIJ, tolerance)
+		}
+		if (j == rowNumber-1) && (rowNumber < numRows-1) {
+			// This is a sub-diagonal element before the last row. Full reduction always applies.
+			if absHIJ.Cmp(columnThreshFull[j]) > 0 {
+				return true, j, nil
+			}
+		} else {
+			// This is to the left of the sub-diagonal or in the last row. The logic that set
+			// columnThresh to columnThreshGentle or columnThreshFull applies.
+			if absHIJ.Cmp(columnThresh[j]) > 0 {
+				return true, j, nil
+			}
+		}
+	}
+
+	// No elements in row rowNumber need reducing
+	return false, -1, nil
+}
+
+// getLastNonZero returns the last column number in H, starting from the left, that contains
+// a not-essentially-zero element in the last row and only essentially zero values to its right.
+// If there are no such columns of H (i.e. H[numRows-1] is all essentially zero), getLastNonZero
+// returns -1.
+func getLastNonZero(h *bigmatrix.BigMatrix, caller string) (int, error) {
+	numRows, numCols := h.Dimensions()
+	for colNbr := numCols - 1; 0 <= colNbr; colNbr-- {
+		hEntry, err := h.Get(numRows-1, colNbr)
+		if err != nil {
+			return 0, fmt.Errorf(
+				"%s: could not get H[%d][%d]: %q", caller, numRows-1, colNbr, err.Error(),
+			)
+		}
+		if !hEntry.IsSmall() {
+			return colNbr, nil
+		}
+	}
+
+	// This line should be reached if the last row of H is all essentially zero
+	return -1, nil
+}
+
+// isReduced is a convenience function that wraps a series of tests of the rows of H that use
+// rowNeedsReduction. Returned values:
+//
+// - whether H is reduced
+//
+// - a row and column that exceeds the threshold for H being reduced, or (-1, -1) if H is reduced
+//
+// - any error encountered
+func isReduced(
+	h *bigmatrix.BigMatrix, reductionMode int, gentlyReduceAllRows bool, log2tolerance int, caller string,
+) (bool, int, int, error) {
+	numRows := h.NumRows()
+	half := bignumber.NewPowerOfTwo(-1)
+	halfPlusReductionMode := bignumber.NewFromInt64(0).Add(half, bignumber.NewFromInt64(int64(reductionMode)))
+	columnThreshGentle, columnThreshFull, err := getColumnThresholds(h, halfPlusReductionMode, caller)
+	if err != nil {
+		return true, -1, -1, err
+	}
+	for i := 1; i < numRows; i++ {
+		var needsReduction bool
+		var column int
+		needsReduction, column, err = rowNeedsReduction(
+			h, columnThreshGentle, columnThreshFull, gentlyReduceAllRows, i, log2tolerance, caller,
+		)
+		if err != nil {
+			return true, -1, -1, err
+		}
+		if needsReduction {
+			return false, i, column, nil
+		}
+	}
+	return true, -1, -1, nil
+}
+
+// bigNumberDToRD left-multiplies D in-place by an expansion, R, of subMatrix into the
+// numRows x numRows identity matrix, injecting entries of subMatrix into
+// entries of the identity indicated by the variable, indices. D should have
+// been obtained by GetInt64D, and is represented by the variable, dMatrix.
+func bigNumberDToRD(dBigNumberMatrix *bigmatrix.BigMatrix, numRows int, rowOperation *RowOperation) error {
+	if rowOperation.IsPermutation() {
+		return dBigNumberMatrix.PermuteRows(rowOperation.PermutationOfH)
+	}
+	numIndices := len(rowOperation.Indices)
+	int64SubMatrix := make([]int64, numIndices*numRows)
+	for i := 0; i < numIndices; i++ {
+		for j := 0; j < numIndices; j++ {
+			int64SubMatrix[i*numRows+rowOperation.Indices[j]] = int64(
+				rowOperation.OperationOnH[i*numIndices+j],
+			)
+		}
+	}
+
+	// Inputs to dotProduct are available.
+	newSubMatrixOfD := make([]*bignumber.BigNumber, numIndices*numRows)
+	cursor := 0
+	for i := 0; i < numIndices; i++ {
+		for j := 0; j < numRows; j++ {
+			// D is lower triangular, so the dot product can begin at row j of D
+			var err error
+			newSubMatrixOfD[cursor], err = bigmatrix.Int64DotProduct(
+				int64SubMatrix, numRows, dBigNumberMatrix, i, j, j, numRows, true,
+			)
+			if err != nil {
+				return fmt.Errorf(
+					"UpdateBigNumberA: error computing newSubMatrixOfD[%d]: %q", cursor, err.Error(),
+				)
+			}
+			cursor++
+		}
+	}
+
+	// The affected entries of D need replacing
+	cursor = 0
+	for i := 0; i < numIndices; i++ {
+		for j := 0; j < numRows; j++ {
+			err := dBigNumberMatrix.Set(rowOperation.Indices[i], j, newSubMatrixOfD[cursor])
+			if err != nil {
+				return fmt.Errorf(
+					"UpdateBigNumberA: error setting dBigNumberMatrix[%d][%d]: %q", i, j, err.Error(),
+				)
+			}
 			cursor++
 		}
 	}
@@ -834,9 +1262,7 @@ func rightMultiplyByBigNumberER(leftMatrix, erMatrix *bigmatrix.BigMatrix, indic
 		for k := 0; k < leftNumCols; k++ {
 			err = leftMatrix.Set(i, k, newLeftMatrix[cursor])
 			if err != nil {
-				return fmt.Errorf("%s: could not set leftMatrix[%d][%d]: %q",
-					caller, i, k, err.Error(),
-				)
+				return fmt.Errorf("%s: could not set leftMatrix[%d][%d]: %q", caller, i, k, err.Error())
 			}
 			cursor++
 		}
@@ -896,7 +1322,7 @@ func reducePair(
 		} else {
 			coefficientAsBigNumber.Add(coefficientAsBigNumber, oneHalf)
 		}
-		coefficientAsInt64Ptr := coefficientAsBigNumber.RoundTowardsZero()
+		coefficientAsInt64Ptr := coefficientAsBigNumber.Int64RoundTowardsZero()
 
 		// Handle edge cases where coefficientAsInt64Ptr is nil, is de-referenced to zero,
 		// or is de-referenced into such a large integer that it cannot be incorporated

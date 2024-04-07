@@ -46,7 +46,7 @@ func TestNew(t *testing.T) {
 	gamma00 := "1."
 	expected00, err := newExpectedState(rawStrs00, sortedRawStrs00, gamma00)
 	assert.NoError(t, err)
-	actual00, err := NewState(rawStrs00, "1", ReductionFull)
+	actual00, err := NewState(rawStrs00, "1", ReductionFull, false)
 	expected00.testEquality(t, actual00)
 	expected00.checkSortedToUnsorted(t, actual00)
 
@@ -55,7 +55,7 @@ func TestNew(t *testing.T) {
 	gamma01 := "1.16"
 	expected01, err := newExpectedState(rawStrs01, sortedRawStrs01, gamma01)
 	assert.NoError(t, err)
-	actual01, err := NewState(rawStrs01, gamma01, ReductionFull)
+	actual01, err := NewState(rawStrs01, gamma01, ReductionFull, false)
 	assert.NoError(t, err)
 	expected01.testEquality(t, actual01)
 	expected01.checkSortedToUnsorted(t, actual01)
@@ -75,13 +75,13 @@ func TestState_OneIteration(t *testing.T) {
 			input[j] = getRandomDecimalStr(t, digitsPerEntry)
 		}
 		gammaStr := fmt.Sprintf("%f", 1.16+rand.Float64()/10)
-		state, err := NewState(input, gammaStr, ReductionFull)
+		state, err := NewState(input, gammaStr, ReductionFull, false)
 		assert.NoError(t, err)
 		var roundOffErrorAsString string
 		numIterations := 0 // needed outside the loop below
 		for ; numIterations < maxIterations; numIterations++ {
 			var terminated bool
-			terminated, err = state.OneIteration(GetRClassic)
+			terminated, err = state.OneIteration(GetRClassic, true)
 			assert.NoError(t, err)
 			roundOffError := state.GetObservedRoundOffError()
 			_, roundOffErrorAsString = roundOffError.String()
@@ -106,13 +106,18 @@ func TestState_OneIteration(t *testing.T) {
 					fmt.Printf("-")
 				}
 			}
-			err = state.CheckInvariants()
-			assert.NoError(t, err)
 		}
 		updatedRawX := state.GetUpdatedRawX()
+		_, maxInt64DEntryAsStr := state.maxInt64DMatrixEntry.String()
+		_, maxBigNumberDEntryAsStr := state.maxBigNumberDMatrixEntry.String()
 		fmt.Printf(
-			"\nAfter %d iterations, round-off error = %s and updated raw x =\n%v\n",
-			numIterations, roundOffErrorAsString, updatedRawX,
+			"\nAfter %d iterations:\n"+
+				"- %d all-zero rows were calculated\n"+
+				"- round-off error = %s\n"+
+				"- max [int64, bigNumber] entry of D = [%s %s]\n"+
+				"- updated raw x =\n%v\n",
+			numIterations, state.GetAllZeroRowsCalculated(), roundOffErrorAsString,
+			maxInt64DEntryAsStr, maxBigNumberDEntryAsStr, updatedRawX,
 		)
 	}
 }

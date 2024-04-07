@@ -4,14 +4,12 @@ package pslqops
 
 import (
 	"fmt"
-	"math"
-	"math/rand"
-	"testing"
-
 	"github.com/predrag3141/PSLQ/bigmatrix"
 	"github.com/predrag3141/PSLQ/bignumber"
 	"github.com/predrag3141/PSLQ/util"
 	"github.com/stretchr/testify/assert"
+	"math/rand"
+	"testing"
 )
 
 const (
@@ -22,253 +20,377 @@ const (
 	printActualTU
 )
 
-func TestReduceLargeRowsAndCols(t *testing.T) {
-	const numRows = 20
-	const numCols = 19
-	const numTests = 25
-	const minSeed = 65424
-	const seedIncr = 6731
-	const maxEntry = 1000
-	const maxSubDiagonalEntry = 10
-	const maxNumReductions = 10
-	const inflationFactor = 10000
+func TestReductionMode(t *testing.T) {
+	const numRows = 17
+	const numCols = 16
+	const reductionGentle = 1
+	const reductionVeryGentle = 5
+	const maxDiagonalEntry = 10
+	const maxEntryInH = 10 * maxDiagonalEntry * reductionVeryGentle
+	const numSeedsPerTest = 1000
+	const numTests = 27
+	const minSeed = 293957
 
-	maxRatios := make([]float64, numTests)
-	identity := make([]int64, numRows*numRows)
-	for i := 0; i < numRows; i++ {
-		identity[i*numRows+i] = 1
-	}
-	for testNbr := 0; testNbr < numTests; testNbr++ {
-		var isRow bool // whether the inflated row or column is a row
-		rand.Seed(int64(minSeed + testNbr*seedIncr))
-		rcNbr := rand.Intn(numCols)
-		isRow = []bool{false, true}[rand.Intn(2)]
-		dh := make([][]int64, maxNumReductions+1)
-		dh[0] = make([]int64, numRows*numCols)
-		for i := 0; i < numRows; i++ {
-			for j := 0; j <= i && j < numCols; j++ {
-				sgn := 2*rand.Intn(2) - 1
-				if i == j {
-					dh[0][i*numCols+j] = int64(sgn) * int64(rand.Intn(maxEntry))
-				} else {
-					dh[0][i*numCols+j] = int64(sgn) * int64(rand.Intn(maxSubDiagonalEntry))
-				}
-				if i == j && dh[0][i*numCols+j] == 0 {
-					dh[0][i*numCols+j] = int64(sgn)
-				}
-				if (isRow && (i == rcNbr) && (j < rcNbr)) || (!isRow && (j == rcNbr) && (i > rcNbr)) {
-					// This entry is to be inflated
-					dh[0][i*numCols+j] = dh[0][i*numCols+j]*inflationFactor + int64(rand.Intn(inflationFactor))
-				}
-			}
-		}
-		maxRatio := 1.0
-		for reductionNbr := 0; (reductionNbr < maxNumReductions) && (maxRatio > 0.5); reductionNbr++ {
-			h, err := bigmatrix.NewFromInt64Array(dh[reductionNbr], numRows, numCols)
-			assert.NoError(t, err)
-			var dMatrix []int64
-			var isIdentity bool
-			dMatrix, _, isIdentity, err = GetInt64D(h, ReductionFull)
-			if reductionNbr == 0 {
-				assert.False(t, isIdentity)
-			}
-			if isIdentity {
-				break
-			}
-			assert.NoError(t, err)
-			dh[reductionNbr+1], err = util.MultiplyIntInt(dMatrix, dh[reductionNbr], numRows)
-
-			maxRatio = 0.0
-			for j := 0; j < numCols; j++ {
-				absDiagonalEntry := math.Abs(float64(dh[reductionNbr+1][j*numCols+j]))
-				for i := j + 1; i < numRows; i++ {
-					thisRatio := math.Abs(float64(dh[reductionNbr+1][i*numCols+j]) / absDiagonalEntry)
-					if thisRatio > maxRatio {
-						maxRatio = thisRatio
-					}
-				}
-			}
-		}
-		assert.GreaterOrEqual(t, 0.5, maxRatio)
-		maxRatios[testNbr] = maxRatio
-	}
-	fmt.Printf("Max ratios: ")
-	for testNbr := 0; testNbr < numTests; testNbr++ {
-		fmt.Printf("%5.4f ", maxRatios[testNbr])
-	}
-	fmt.Printf("\n")
-}
-
-func TestGetInt64D_GetE(t *testing.T) {
-	// Combines testing of GetInt64E and GetBigNumberE
-	const numRows = 7
-	const numCols = 6
-	const maxDiagonalOrNonGentleModeEntry = 10
-	const maxSubDiagonalGentleModeEntry = gentleReductionModeThresh * maxDiagonalOrNonGentleModeEntry
-	const numSeedsPerTest = 1
-	const minSeed = 12345
-	const numTests = 10
-
-	seed := minSeed
-	maxDMatrixEntry := make([]int64, 10) // Long enough to index by reduction mode
-	dhEntriesTested := make([]int, 10)   // Long enough to index by reduction mode
+	seed := int64(minSeed)
+	rand.Seed(seed)
 	for testNbr := 0; testNbr < numTests; testNbr++ {
 		for _, reductionMode := range []int{
-			ReductionFull, ReductionGentle, ReductionAllButLastRow, ReductionSubDiagonal,
+			ReductionFull, reductionGentle, reductionVeryGentle,
 		} {
-			rand.Seed(int64(seed))
-			hEntries := make([]int64, numRows*numCols)
-			for i := 0; i < numRows; i++ {
-				for j := 0; j <= i && j < numCols; j++ {
-					sgn := 2*rand.Intn(2) - 1
-					if (i == j) || (reductionMode != ReductionGentle) {
-						hEntries[i*numCols+j] = int64(sgn) * int64(rand.Intn(maxDiagonalOrNonGentleModeEntry))
-					} else {
-						// In gentle reduction mode, entries below the diagonal must be large to make it
-						// likely that at least one entry in D exceeds gentleReductionModeThresh,
-						hEntries[i*numCols+j] = int64(sgn) * int64(rand.Intn(maxSubDiagonalGentleModeEntry))
+			for _, gentlyReduceAllRows := range []bool{false, true} {
+				// Initializations
+				half := bignumber.NewPowerOfTwo(-1)
+				halfPlusReductionMode := bignumber.NewFromInt64(0).Add(
+					half, bignumber.NewFromInt64(int64(reductionMode)),
+				)
+
+				// Create H
+				hEntries := make([]int64, numRows*numCols)
+				getHForDRelatedTests(hEntries, numRows, numCols, reductionMode, maxDiagonalEntry, maxEntryInH, testNbr)
+				h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
+				assert.NoError(t, err)
+
+				// Create column thresholds
+				columnThreshGentle, columnThreshFull, err := getColumnThresholds(
+					h, halfPlusReductionMode, "TestReductionMode",
+				)
+				assert.NoError(t, err)
+
+				// Test column thresholds
+				for j := 0; j < numCols; j++ {
+					absHEntry := hEntries[j*numCols+j]
+					if absHEntry < 0 {
+						absHEntry = -absHEntry
 					}
-					if (i == j) && (hEntries[i*numCols+j] == 0) {
-						hEntries[i*numCols+j] = int64(sgn)
-					}
+					expectedColumnThreshGentle := bignumber.NewFromInt64(0).Mul(
+						bignumber.NewFromInt64(absHEntry), halfPlusReductionMode,
+					)
+					_, expectedColumnThreshGentleAsStr := expectedColumnThreshGentle.String()
+					_, actualColumnThreshGentleAsStr := columnThreshGentle[j].String()
+					assert.Equalf(
+						t, 0, expectedColumnThreshGentle.Cmp(columnThreshGentle[j]),
+						"NumRows: %d Reduction mode: %d gentlyReduceAllRows: %v H[%d][%d] = %d\n"+
+							"expectedColumnThreshGentle: %q actual columnThreshGentle[%d]: %q",
+						numRows, reductionMode, gentlyReduceAllRows, j, j, hEntries[j*numCols+j],
+						expectedColumnThreshGentleAsStr, j, actualColumnThreshGentleAsStr,
+					)
+
+					expectedColumnThreshFull := bignumber.NewFromInt64(0).Mul(
+						bignumber.NewFromInt64(absHEntry), half,
+					)
+					_, expectedColumnThreshFullAsStr := expectedColumnThreshFull.String()
+					_, actualColumnThreshFullAsStr := columnThreshFull[j].String()
+					assert.Equalf(
+						t, 0, expectedColumnThreshFull.Cmp(columnThreshFull[j]),
+						"NumRows: %d reduction mode: %d gentlyReduceAllRows: %v H[%d][%d] = %d\n"+
+							"expectedColumnThreshGentle: %q columnThreshGentle[%d]: %q",
+						numRows, reductionMode, gentlyReduceAllRows, j, j, hEntries[j*numCols+j],
+						expectedColumnThreshFullAsStr, j, actualColumnThreshFullAsStr,
+					)
 				}
-			}
-			h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
-			assert.NoError(t, err)
 
-			// Test GetInt64D
-			var dMatrix []int64
-			var maxEntry int64
-			dMatrix, maxEntry, _, err = GetInt64D(h, reductionMode)
-			assert.NoError(t, err)
-			if maxEntry > maxDMatrixEntry[reductionMode] {
-				maxDMatrixEntry[reductionMode] = maxEntry
-			}
-
-			// Entries of DH below the diagonal are no more than half the diagonal element above
-			// them in absolute value. The most straightforward way to test this is by looping
-			// through columns, then rows.
-			dAsBigMatrix, err := bigmatrix.NewFromInt64Array(dMatrix, numRows, numRows)
-			assert.NoError(t, err)
-			dh, err := bigmatrix.NewEmpty(numRows, numCols).Mul(dAsBigMatrix, h)
-			assert.NoError(t, err)
-			assert.NoError(t, err)
-			hasEntryAboveThresh := make([]bool, numRows)
-
-			// In gentle reduction mode, flag rows after i+1 with entries above
-			// gentleReductionModeThresh. This is used both for deciding whether to
-			// skip the rest of this loop iteration, and for ensuring that at least
-			// one row has a large enough entry to test DH.
-			if reductionMode == ReductionGentle {
+				// Test rowNeedsReduction
+				diagonal := make([]int64, numCols)
+				for j := 0; j < numCols; j++ {
+					diagonal[j] = hEntries[j*numCols+j]
+				}
 				for i := 0; i < numRows; i++ {
+					expectedColumn := -1
+					expectedRowNeedsReduction := false
 					for j := 0; j < i; j++ {
-						dEntry := dMatrix[i*numRows+j]
-						if (gentleReductionModeThresh < dEntry) || (gentleReductionModeThresh < -dEntry) {
-							hasEntryAboveThresh[i] = true
+						absEntry := hEntries[j*numCols+j]
+						if absEntry < 0 {
+							absEntry = -absEntry
+						}
+						fullThresh := absEntry / 2
+						gentleThresh := int64(reductionMode)*absEntry + fullThresh
+						thresh := fullThresh
+						if i == numRows-1 {
+							thresh = gentleThresh
+						} else if gentlyReduceAllRows && (j < i-1) {
+							thresh = gentleThresh
+						}
+						if (hEntries[i*numCols+j] > thresh) || (-hEntries[i*numCols+j] > thresh) {
+							expectedRowNeedsReduction = true
+							expectedColumn = j
 							break
 						}
 					}
-				}
-			}
-
-			for i := 0; i < numCols; i++ {
-				var absDiagonalEntry *bignumber.BigNumber
-				absDiagonalEntry, err = dh.Get(i, i)
-				assert.NoError(t, err)
-				absDiagonalEntry.Abs(absDiagonalEntry)
-
-				for j := i + 1; j < numRows; j++ {
-					// Bypass the last row in all-but-last-row, gentle or sub-diagonal reduction mode
-					if (reductionMode != ReductionFull) && (j == numRows-1) {
-						break
-					}
-
-					if j != i+1 {
-						// In gentle reduction mode, below the sub-diagonal, do not test entries in rows
-						// with a maximum entry under gentleReductionModeThresh. DH is not bounded by a
-						// multiple of the diagonal element above the entries in such rows.
-						if (reductionMode == ReductionGentle) && (hasEntryAboveThresh[j] == false) {
-							continue
-						}
-
-						// In sub-diagonal reduction mode, below the sub-diagonal, there is no
-						// expectation that any entries in DH will be bounded by a multiple of
-						// the diagonal element above them.
-						if reductionMode == ReductionSubDiagonal {
-							continue
-						}
-					}
-
-					// It is expected that 2*DH[j][i] <= DH[i][i]
-					dhEntriesTested[reductionMode]++
-					var absInteriorEntry *bignumber.BigNumber
-					absInteriorEntry, err = dh.Get(j, i)
-					absInteriorEntry.Abs(absInteriorEntry)
-					twoAbsInteriorEntry := bignumber.NewFromInt64(0).Int64Mul(2, absInteriorEntry)
-					_, absInteriorEntryAsStr := absInteriorEntry.String()
-					_, twoAbsInteriorEntryAsStr := twoAbsInteriorEntry.String()
-					_, absDiagonalEntryAsStr := absDiagonalEntry.String()
-					assert.Truef(
-						t, twoAbsInteriorEntry.Cmp(absDiagonalEntry) <= 0,
-						"Reduction mode = %d hasEntryAboveThresh = %v\n"+
-							"current row of D: %v\n"+
-							"2 DH[%d][%d] = (2)(%s) = %s > %s = DH[%d][%d]",
-						reductionMode, hasEntryAboveThresh,
-						dMatrix[j*numRows:(j+1)*numRows],
-						j, i, absInteriorEntryAsStr, twoAbsInteriorEntryAsStr,
-						absDiagonalEntryAsStr, i, i,
+					var actualRowNeedsReduction bool
+					var actualColumn int
+					actualRowNeedsReduction, actualColumn, err = rowNeedsReduction(
+						h, columnThreshGentle, columnThreshFull, gentlyReduceAllRows, i, 0, "TestReductionMode",
+					)
+					assert.Equalf(
+						t, expectedRowNeedsReduction, actualRowNeedsReduction,
+						"NumRows: %d reduction mode: %d gentlyReduceAllRows: %v\n"+
+							"Diagonal: %v Row %d: %v",
+						numRows, reductionMode, gentlyReduceAllRows,
+						diagonal, i, hEntries[i*numCols:(i+1)*numCols],
+					)
+					assert.Equalf(
+						t, expectedColumn, actualColumn,
+						"NumRows: %d reduction mode: %d gentlyReduceAllRows: %v\n"+
+							"Diagonal: %v Row %d: %v",
+						numRows, reductionMode, gentlyReduceAllRows,
+						diagonal, i, hEntries[i*numCols:(i+1)*numCols],
 					)
 				}
 			}
+		}
+		seed += numSeedsPerTest
+		rand.Seed(seed)
+	}
+}
 
-			// Test GetInt64E
-			int64EMatrix, containsLargeElement, err := GetInt64E(dMatrix, numRows)
-			assert.False(t, containsLargeElement)
-			shouldBeIdentity, err := util.MultiplyIntInt(dMatrix, int64EMatrix, numRows)
-			assert.NoError(t, err)
-			for i := 0; i < numRows; i++ {
-				for j := 0; j < numRows; j++ {
-					if i == j {
-						assert.Equal(t, int64(1), shouldBeIdentity[i*numRows+j])
-					} else {
-						assert.Equal(t, int64(0), shouldBeIdentity[i*numRows+j])
+func TestGetD_GetE(t *testing.T) {
+	const numRows = 17
+	const numCols = 16
+	const reductionGentle = 1
+	const reductionVeryGentle = 3
+	const maxDiagonalEntry = 5
+	const maxEntryInH = 2 * maxDiagonalEntry * reductionVeryGentle
+	const numSeedsPerTest = 1000
+	const numTests = 27
+	const minSeed = 155957
+
+	seed := minSeed
+	maxInt64DMatrixEntry := make(map[int]*bignumber.BigNumber)
+	maxBigNumberDMatrixEntry := make(map[int]*bignumber.BigNumber)
+	identityMatrixDs := make(map[int]int)
+	nonIdentityMatrixDs := make(map[int]int)
+	for testNbr := 0; testNbr < numTests; testNbr++ {
+		for _, reductionMode := range []int{
+			ReductionFull, reductionGentle, reductionVeryGentle,
+		} {
+			for _, gentlyReduceAllRows := range []bool{false, true} {
+				// Type for tracking information about Int64 and BigNumber D
+				type DInfo struct {
+					isIdentity bool
+					maxEntry   *bignumber.BigNumber // max entries differ slightly between int64 and bigNumber
+					int64D     []int64
+					bigNumberD *bigmatrix.BigMatrix // A copy of dInt64Matrix or the original dBigNumberMatrix
+					dh         *bigmatrix.BigMatrix
+				}
+
+				// Create hEntries
+				// Create H
+				hEntries := make([]int64, numRows*numCols)
+				getHForDRelatedTests(hEntries, numRows, numCols, reductionMode, maxDiagonalEntry, maxEntryInH, testNbr)
+				h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
+				assert.NoError(t, err)
+
+				// Call GetInt64D
+				int64DInfo := DInfo{
+					isIdentity: true,
+					maxEntry:   nil,
+					int64D:     make([]int64, numRows*numRows),
+					bigNumberD: nil,
+					dh:         bigmatrix.NewEmpty(numRows, numCols),
+				}
+				var calculatedAllZeroRow bool
+				int64DInfo.maxEntry, int64DInfo.isIdentity, calculatedAllZeroRow, err = GetInt64D(
+					h, reductionMode, gentlyReduceAllRows, int64DInfo.int64D,
+				)
+				assert.NoError(t, err)
+				assert.False(t, calculatedAllZeroRow)
+				int64DInfo.bigNumberD, err = bigmatrix.NewFromInt64Array(int64DInfo.int64D, numRows, numRows)
+				assert.NoError(t, err)
+				var startedOffReduced bool
+				var row, column int
+				startedOffReduced, row, column, err = isReduced(
+					h, reductionMode, gentlyReduceAllRows, 0, "TestGetD_GetE",
+				)
+				assert.NoError(t, err)
+				if startedOffReduced {
+					identityMatrixDs[reductionMode]++
+					assert.Truef(t, int64DInfo.isIdentity, "reduction mode: %d\nh:\n%v\n", reductionMode, h)
+				} else {
+					// H[row][column] needs reducing
+					nonIdentityMatrixDs[reductionMode]++
+					assert.Falsef(
+						t, int64DInfo.isIdentity,
+						"reduction mode: %d gentlyReduceAllRows: %v row: %d column: %d\nh:\n%v\n",
+						reductionMode, gentlyReduceAllRows, row, column, h,
+					)
+				}
+				max, ok := maxInt64DMatrixEntry[reductionMode]
+				if (!ok) || max.Cmp(int64DInfo.maxEntry) < 0 {
+					maxInt64DMatrixEntry[reductionMode] = bignumber.NewFromBigNumber(int64DInfo.maxEntry)
+				}
+				_, err = int64DInfo.dh.Mul(int64DInfo.bigNumberD, h)
+				assert.NoError(t, err)
+
+				// Call GetBigNumberD
+				bigNumberDInfo := DInfo{
+					isIdentity: true,
+					maxEntry:   nil,
+					bigNumberD: bigmatrix.NewEmpty(numRows, numRows),
+					dh:         bigmatrix.NewEmpty(numRows, numCols),
+				}
+				bigNumberDInfo.maxEntry, bigNumberDInfo.isIdentity, calculatedAllZeroRow, err = GetBigNumberD(
+					h, reductionMode, gentlyReduceAllRows, bigNumberDInfo.bigNumberD,
+				)
+				assert.NoError(t, err)
+				startedOffReduced, row, column, err = isReduced(
+					h, reductionMode, gentlyReduceAllRows, 0, "TestGetD_GetE",
+				)
+				assert.NoError(t, err)
+				if startedOffReduced {
+					identityMatrixDs[reductionMode]++
+					assert.Truef(t, bigNumberDInfo.isIdentity, "reduction mode: %d\nh:\n%v\n", reductionMode, h)
+				} else {
+					nonIdentityMatrixDs[reductionMode]++
+					assert.Falsef(
+						t, int64DInfo.isIdentity,
+						"reduction mode: %d gentlyReduceAllRows: %v row: %d column: %d\nh:\n%v\n",
+						reductionMode, gentlyReduceAllRows, row, column, h,
+					)
+				}
+				max, ok = maxBigNumberDMatrixEntry[reductionMode]
+				if (!ok) || max.Cmp(bigNumberDInfo.maxEntry) < 0 {
+					maxBigNumberDMatrixEntry[reductionMode] = bignumber.NewFromBigNumber(bigNumberDInfo.maxEntry)
+				}
+				_, err = bigNumberDInfo.dh.Mul(bigNumberDInfo.bigNumberD, h)
+				assert.NoError(t, err)
+
+				// The bigNumber and int64 matrices, and their maximum entries, should be equal
+				tolerance := bignumber.NewPowerOfTwo(-50)
+				var equals bool
+				equals, err = bigNumberDInfo.bigNumberD.Equals(int64DInfo.bigNumberD, tolerance)
+				assert.NoError(t, err)
+				if !equals {
+					// Round-off can cause a difference between the int64 and bigNumber versions of D.
+					// If that happens, the first entry in a row with a difference, starting from the
+					// diagonal and working to the left -- call this position (i,j) -- has the following
+					// property:
+					//
+					// The int64 and bigNumber versions are negatives of each other and have absolute
+					// value equal to reductionMode.
+					//
+					// The reason this happens is that each function that computes the D matrix computes
+					// a 0 in position (i,j). One of the functions considers this entry to be negative,
+					// the other non-negative. One adds to this zero the value +reductionMode, and the
+					// other adds -reductionMode. The following code checks each row to ensure that either
+					// this is what happens, or the rows are equal.
+					var bigNumberEntry, int64Entry *bignumber.BigNumber
+					for i := 0; i < numRows; i++ {
+						for j := i - 1; 0 <= j; j-- {
+							bigNumberEntry, err = bigNumberDInfo.bigNumberD.Get(i, j)
+							assert.NoError(t, err)
+							int64Entry, err = bigNumberDInfo.bigNumberD.Get(i, j)
+							assert.NoError(t, err)
+							if int64Entry.Cmp(bigNumberEntry) != 0 {
+								// Entries in D as calculated by two different functions can be 0 plus or
+								// minus the reduction mode. Since j counts down from i-1, which is in the
+								// same order that the entries of D were calculated, this opposite-sign
+								// discrepancy is the first discrepancy that will be seen in this row.
+								// If j were allowed to count down further, the discrepancies would continue
+								// in a less predictable way.
+								sum := bignumber.NewFromInt64(0).Add(bigNumberEntry, int64Entry)
+								reductionModeAsBigNumber := bignumber.NewFromInt64(int64(reductionMode))
+								sumIsZero := sum.IsZero()
+								oneOrTheOtherIsReductionMode := (int64Entry.Cmp(reductionModeAsBigNumber) == 0) ||
+									(bigNumberEntry.Cmp(reductionModeAsBigNumber) == 0)
+								_, int64EntryAsStr := int64Entry.String()
+								_, bigNumberEntryAsStr := bigNumberEntry.String()
+								assert.Truef(
+									t, sumIsZero && oneOrTheOtherIsReductionMode,
+									"D[%d][%d] = %q for int64 and %q for bigNumber "+
+										"do not sum to zero and/or are both not equal to reductionMode = %d\n"+
+										"h: %v\nInt64 D:\n%v\nInt64 DH:\n%v\n"+
+										"BigNumber D:\n%v\nBigNumber DH:\n%v\n",
+									i, j, int64EntryAsStr, bigNumberEntryAsStr, reductionMode,
+									h, int64DInfo.bigNumberD, int64DInfo.dh,
+									bigNumberDInfo.bigNumberD, bigNumberDInfo.dh,
+								)
+
+								// Once the entries in D diverge, there are no known ways to compare the
+								// rest of the row (not that I tried that hard). See the comment above
+								// regarding predictability of discrepancies after the first one seen.
+								break
+							}
+						}
 					}
 				}
-			}
 
-			// Test GetBigNumberE
-			bigNumberEMatrix, err := GetBigNumberE(dMatrix, numRows)
-			assert.NoError(t, err)
-			for i := 0; i < numRows; i++ {
-				for j := 0; j < numRows; j++ {
-					var shouldBeZero *bignumber.BigNumber
-					if i == j {
-						// expect to add a total of 1 in the loop below
-						shouldBeZero = bignumber.NewFromInt64(-1)
-					} else {
-						// expect to add a total of 0 in the loop below
-						shouldBeZero = bignumber.NewFromInt64(0)
+				// Right-multiplying H by D should reduce it.
+				_, err = int64DInfo.dh.Mul(bigNumberDInfo.bigNumberD, h)
+				var dhIsReduced bool
+				dhIsReduced, row, column, err = isReduced(
+					int64DInfo.dh, reductionMode, gentlyReduceAllRows, 0, "TestGetD_GetE",
+				)
+				assert.NoError(t, err)
+				assert.Truef(t, dhIsReduced, "row: %d column: %d\nDH:\n%v", row, column, int64DInfo.dh)
+
+				// Test GetInt64E
+				int64EMatrix, _, err := GetInt64E(int64DInfo.int64D, numRows)
+				shouldBeIdentity, err := util.MultiplyIntInt(int64DInfo.int64D, int64EMatrix, numRows)
+				assert.NoError(t, err)
+				for i := 0; i < numRows; i++ {
+					for j := 0; j < numRows; j++ {
+						if i == j {
+							assert.Equal(t, int64(1), shouldBeIdentity[i*numRows+j])
+						} else {
+							assert.Equal(t, int64(0), shouldBeIdentity[i*numRows+j])
+						}
 					}
-					for k := 0; k < numRows; k++ {
-						eKJ, err := bigNumberEMatrix.Get(k, j)
-						assert.NoError(t, err)
-						shouldBeZero.Int64MulAdd(dMatrix[i*numRows+k], eKJ)
+				}
+
+				// Test GetBigNumberE
+				bigNumberEMatrix, err := GetBigNumberE(int64DInfo.bigNumberD, numRows)
+				assert.NoError(t, err)
+				for i := 0; i < numRows; i++ {
+					for j := 0; j < numRows; j++ {
+						var shouldBeZero *bignumber.BigNumber
+						if i == j {
+							// expect to add a total of 1 in the loop below
+							shouldBeZero = bignumber.NewFromInt64(-1)
+						} else {
+							// expect to add a total of 0 in the loop below
+							shouldBeZero = bignumber.NewFromInt64(0)
+						}
+						for k := 0; k < numRows; k++ {
+							var eKJ *bignumber.BigNumber
+							eKJ, err = bigNumberEMatrix.Get(k, j)
+							assert.NoError(t, err)
+							shouldBeZero.Int64MulAdd(int64DInfo.int64D[i*numRows+k], eKJ)
+						}
+						assert.True(t, shouldBeZero.IsZero())
 					}
-					assert.True(t, shouldBeZero.IsZero())
 				}
 			}
 		}
 		seed += numSeedsPerTest
 	}
+
+	// Report max entries for int64 and big number
+	maxEntryAsStr := make(map[int]string)
+	for _, mode := range []int{ReductionFull, reductionGentle, reductionVeryGentle} {
+		_, maxEntryAsStr[mode] = maxInt64DMatrixEntry[mode].String()
+	}
 	fmt.Printf(
-		"Max entry in D by reduction mode: [full, all-but-last-row, gentle, sub-diagonal] =  [%d, %d, %d, %d]\n",
-		maxDMatrixEntry[ReductionFull], maxDMatrixEntry[ReductionAllButLastRow],
-		maxDMatrixEntry[ReductionGentle], maxDMatrixEntry[ReductionSubDiagonal],
+		"Max entry in int64 D by reduction mode: [full, gentle, very gentle] =  [%s, %s, %s]\n",
+		maxEntryAsStr[ReductionFull], maxEntryAsStr[reductionGentle], maxEntryAsStr[reductionVeryGentle],
 	)
+	for _, mode := range []int{ReductionFull, reductionGentle, reductionVeryGentle} {
+		_, maxEntryAsStr[mode] = maxBigNumberDMatrixEntry[mode].String()
+	}
 	fmt.Printf(
-		"Number of entries of DH tested by reduction mode: [full, all-but-last-row, gentle, sub-diagonal] =  [%d, %d, %d, %d]\n",
-		dhEntriesTested[ReductionFull], dhEntriesTested[ReductionAllButLastRow],
-		dhEntriesTested[ReductionGentle], dhEntriesTested[ReductionSubDiagonal],
+		"Max entry in big number D by reduction mode: [full, gentle, very gentle] =  [%s, %s, %s]\n",
+		maxEntryAsStr[ReductionFull], maxEntryAsStr[reductionGentle], maxEntryAsStr[reductionVeryGentle],
+	)
+
+	// Report number of times D was the identity matrix
+	fmt.Printf(
+		"Number of times (and percent) that D was the identity matrix by reduction mode: [full, gentle, very gentle] ="+
+			"[%d (%3.2f), %d (%3.2f), %d (%3.2f)]\n",
+		identityMatrixDs[ReductionFull],
+		100.0*float64(identityMatrixDs[ReductionFull])/float64(identityMatrixDs[ReductionFull]+nonIdentityMatrixDs[ReductionFull]),
+		identityMatrixDs[reductionGentle],
+		100.0*float64(identityMatrixDs[reductionGentle])/float64(identityMatrixDs[reductionGentle]+nonIdentityMatrixDs[reductionGentle]),
+		identityMatrixDs[reductionVeryGentle],
+		100.0*float64(identityMatrixDs[reductionVeryGentle])/float64(identityMatrixDs[reductionVeryGentle]+nonIdentityMatrixDs[reductionVeryGentle]),
 	)
 }
 
@@ -276,6 +398,7 @@ func TestReduceH(t *testing.T) {
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 10
+	var calculatedAllZeroRow bool
 
 	for seed := 1234; seed < 1245; seed++ {
 		rand.Seed(int64(seed))
@@ -291,11 +414,13 @@ func TestReduceH(t *testing.T) {
 		}
 		h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
 		assert.NoError(t, err)
-		d, _, _, err := GetInt64D(h, ReductionFull)
+		d := make([]int64, numRows*numRows)
+		_, _, calculatedAllZeroRow, err = GetInt64D(h, ReductionFull, true, d)
 		assert.NoError(t, err)
+		assert.False(t, calculatedAllZeroRow)
 		dh, err := util.MultiplyIntInt(d, hEntries, numRows)
 		assert.NoError(t, err)
-		err = ReduceH(h, d)
+		err = Int64ReduceH(h, d)
 		assert.NoError(t, err)
 		for i := 0; i < numRows; i++ {
 			for j := 0; j < numCols; j++ {
@@ -325,6 +450,8 @@ func TestUpdateInt64A(t *testing.T) {
 	counts := make([]int, numCols+1)
 
 	for seed := minSeed; seed < maxSeed; seed += numSeedsPerTest {
+		rand.Seed(int64(seed))
+
 		// Set up R, D and A
 		dMatrix := make([]int64, numRows*numRows)
 		aMatrix := make([]int64, numRows*numRows)
@@ -396,7 +523,7 @@ func TestUpdateBigNumberA(t *testing.T) {
 	for seed := minSeed; seed < maxSeed; seed += numSeedsPerTest {
 		// Set up R, D and A
 		rand.Seed(int64(seed))
-		dMatrix := make([]int64, numRows*numRows)
+		dInt64Matrix := make([]int64, numRows*numRows)
 		aEntries := make([]int64, numRows*numRows)
 		numIndices := 2 + rand.Intn(numCols-1)
 		assert.Less(t, numIndices, len(counts))
@@ -413,9 +540,9 @@ func TestUpdateBigNumberA(t *testing.T) {
 			}
 			for k := 0; k < i; k++ {
 				sgn := 2*rand.Intn(2) - 1
-				dMatrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
+				dInt64Matrix[i*numRows+k] = int64(sgn) * int64(rand.Intn(maxEntry))
 			}
-			dMatrix[i*numRows+i] = 1
+			dInt64Matrix[i*numRows+i] = 1
 		}
 		aMatrix, err := bigmatrix.NewFromInt64Array(aEntries, numRows, numRows)
 		assert.NoError(t, err)
@@ -437,11 +564,13 @@ func TestUpdateBigNumberA(t *testing.T) {
 			rowOperation = NewFromSubMatrices(indices, subMatrix, subMatrixInverse)
 			rMatrix = util.GetFullInt64Matrix(indices, subMatrix, numRows)
 		}
-		expectedRD, err = util.MultiplyIntInt(rMatrix, dMatrix, numRows)
+		var dBigNumberMatrix *bigmatrix.BigMatrix
+		dBigNumberMatrix, err = bigmatrix.NewFromInt64Array(dInt64Matrix, numRows, numRows)
+		expectedRD, err = util.MultiplyIntInt(rMatrix, dInt64Matrix, numRows)
 		assert.NoError(t, err)
 		expectedRDA, err = util.MultiplyIntInt(expectedRD, aEntries, numRows)
 		assert.NoError(t, err)
-		err = UpdateBigNumberA(aMatrix, dMatrix, numRows, rowOperation)
+		err = UpdateBigNumberA(aMatrix, dBigNumberMatrix, numRows, rowOperation)
 		assert.NoError(t, err)
 		zero := bignumber.NewFromInt64(0)
 		for i := 0; i < numRows; i++ {
@@ -1316,6 +1445,52 @@ func TestReducePair(t *testing.T) {
 					},
 				)
 				assert.NoError(t, err)
+			}
+		}
+	}
+}
+
+func getHForDRelatedTests(
+	hEntries []int64, numRows, numCols, reductionMode, maxDiagonalEntry, maxEntryInH, testNbr int,
+) {
+	for i := 0; i < numRows; i++ {
+		for j := 0; (j <= i) && (j < numCols); j++ {
+			// Both diagonal and interior elements have random algebraic signs
+			sgn := int64(2*rand.Intn(2) - 1)
+
+			// Diagonal elements are free to vary independently of other entries in H.
+			// They must not be zero.
+			if i == j {
+				hEntries[i*numCols+j] = sgn * int64(rand.Intn(maxDiagonalEntry))
+				if hEntries[i*numCols+j] == 0 {
+					hEntries[i*numCols+j] = sgn
+				}
+				continue
+			}
+
+			// For maximum test coverage, elements below the diagonal follow rulse that
+			// depend on the test number.
+			absDiagonalElement := int(hEntries[j*numCols+j])
+			if absDiagonalElement < 0 {
+				absDiagonalElement = -absDiagonalElement
+			}
+			fullReductionThresh := absDiagonalElement / 2
+			gentleReductionThresh := reductionMode*absDiagonalElement + fullReductionThresh
+			threshes := []int{
+				gentleReductionThresh, fullReductionThresh, maxEntryInH,
+			}
+			thresh := 0
+			if i == numRows-1 {
+				thresh = threshes[testNbr%3]
+			} else if j == i-1 {
+				thresh = threshes[(testNbr/3)%3]
+			} else {
+				thresh = threshes[(testNbr/9)%3]
+			}
+			if thresh > 2 {
+				hEntries[i*numCols+j] = sgn * int64(rand.Intn(thresh))
+			} else {
+				hEntries[i*numCols+j] = 0
 			}
 		}
 	}

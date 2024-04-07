@@ -348,9 +348,9 @@ func (bn *BigNumber) Set(x *BigNumber) *BigNumber {
 
 // String() formats bn as
 //
-// - Its decimal fraction or integer (if bn is an integer)
+// - Its value as decimal-formatted numerator/denominator (or just numerator, if bn is an integer)
 //
-// - An approximate decimal, if bn is an integer, otherwise an empty string
+// - An approximate decimal, if bn can be formatted that way; otherwise an empty string
 //
 // and returns the above two strings. If conversion to the decimal string is
 // required (because bn is non-integer) and fails, two empty strings and the
@@ -641,9 +641,32 @@ func (bn *BigNumber) Quo(x *BigNumber, y *BigNumber) (*BigNumber, error) {
 	return bn, nil
 }
 
-// RoundTowardsZero returns a pointer to the largest integer in absolute value
+// RoundTowardsZero converts bn to an integer-valued BigNumber whose value is the
+// nearest integer to bn that has a smaller absolute value than bn. RoundTowardsZero
+// returns a pointer to itself.
+func (bn *BigNumber) RoundTowardsZero() *BigNumber {
+	if bn.log2scale == 0 {
+		return bn
+	}
+	if bn.log2scale < 0 {
+		denominator := powerOf2(-bn.log2scale)
+		retValAsBigInt := big.NewInt(0).Quo(&bn.numerator, denominator)
+		bn.numerator.Set(retValAsBigInt)
+		bn.log2scale = 0
+		return bn
+	}
+
+	// bn.log2scale > 0
+	multiplier := powerOf2(bn.log2scale)
+	retValAsBigInt := big.NewInt(0).Mul(&bn.numerator, multiplier)
+	bn.numerator.Set(retValAsBigInt)
+	bn.log2scale = 0
+	return bn
+}
+
+// Int64RoundTowardsZero returns a pointer to the largest integer in absolute value
 // between zero and bn, if that fits in an int64; otherwise nil
-func (bn *BigNumber) RoundTowardsZero() *int64 {
+func (bn *BigNumber) Int64RoundTowardsZero() *int64 {
 	if bn.log2scale < 0 {
 		denominator := powerOf2(-bn.log2scale)
 		retValAsBigInt := big.NewInt(0).Quo(&bn.numerator, denominator)
@@ -681,9 +704,6 @@ func (bn *BigNumber) RoundTowardsZero() *int64 {
 
 // AsFloat returns a big.Float with the value of the provided input
 // to within 2^-precision.
-//
-// If the module has not been initialized, and initialization is needed
-// to perform the addition, an error is returned.
 func (bn *BigNumber) AsFloat() *big.Float {
 	var retval big.Float
 	retval.SetPrec(uint(2 * precision))
