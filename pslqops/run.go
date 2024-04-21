@@ -289,53 +289,32 @@ func (s *State) GetUpdatedRawX() *bigmatrix.BigMatrix {
 	return s.updatedRawX
 }
 
-// GetDiagonal returns and instance of DiagonalStatistics
+// GetDiagonal returns an instance of DiagonalStatistics
 //
 // The elements of the returned diagonal are deep copies.
 func (s *State) GetDiagonal() (*DiagonalStatistics, error) {
 	return NewDiagonalStatistics(s.h)
 }
 
-// GetSolutions returns an array of []int64 arrays that, based on the diagonal entries
-// and last row of H, should be solutions. An error is returned if there is a failure.
+// GetSolutions returns an array of []int64 arrays that are solutions. An error is returned
+// if there is a failure.
 func (s *State) GetSolutions() (map[int][]int64, error) {
 	retVal := make(map[int][]int64, 0)
-	var err error
-	for i := 0; i < s.numCols; i++ {
-		diagonalIsSmall := false
-		if i == s.numCols-1 {
-			var diagonalElement *bignumber.BigNumber
-			diagonalElement, err = s.h.Get(i, i)
-			if err != nil {
-				return map[int][]int64{},
-					fmt.Errorf("GetSolutions: could not get H[%d][%d]: %q", i, i, err.Error())
-			}
-			diagonalIsSmall = diagonalElement.IsSmall()
-		}
-
-		// Handle the normal case, where whether the last row in column i is small determines
-		// whether column i is a solution.
-		var lastRowElement *bignumber.BigNumber
-		lastRowElement, err = s.h.Get(s.numRows-1, i)
-		if err != nil {
-			return map[int][]int64{},
-				fmt.Errorf("GetSolutions: could not get H[%d][%d]: %q", s.numRows-1, i, err.Error())
-		}
-		lastRowIsSmall := lastRowElement.IsSmall()
-
-		// Between them, diagonalIsSmall and lastRowIsSmall tell whether column i is a solution
-		var columnOfB []int64
-		columnIndex := i
-		if lastRowIsSmall && (!diagonalIsSmall) {
-			columnOfB, err = s.GetColumnOfB(i)
-		}
+	for j := 0; j < s.numCols; j++ {
+		columnOfB, err := s.GetColumnOfB(j)
 		if err != nil {
 			return map[int][]int64{}, fmt.Errorf(
-				"GetSolutions: could not get column %d of H: %q", columnIndex, err.Error(),
+				"GetSolutions: could not get column %d of H: %q", j, err.Error(),
 			)
 		}
-		if len(columnOfB) > 0 {
-			retVal[columnIndex] = columnOfB
+		dotProduct := bignumber.NewFromInt64(0)
+		for i := 0; i < s.numRows; i++ {
+			var xi *bignumber.BigNumber
+			xi, err = s.rawX.Get(0, i)
+			dotProduct.Int64MulAdd(columnOfB[i], xi)
+		}
+		if dotProduct.IsSmall() {
+			retVal[j] = columnOfB
 		}
 	}
 	return retVal, nil
