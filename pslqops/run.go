@@ -300,7 +300,7 @@ func (s *State) GetDiagonal() (*DiagonalStatistics, error) {
 // if there is a failure.
 func (s *State) GetSolutions() (map[int][]int64, error) {
 	retVal := make(map[int][]int64, 0)
-	for j := 0; j < s.numCols; j++ {
+	for j := 0; j < s.numRows; j++ {
 		columnOfB, err := s.GetColumnOfB(j)
 		if err != nil {
 			return map[int][]int64{}, fmt.Errorf(
