@@ -4,11 +4,13 @@ package pslqops
 
 import (
 	"fmt"
+	"github.com/predrag3141/PSLQ/util"
 	"math"
 	"math/big"
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/predrag3141/PSLQ/bigmatrix"
@@ -76,13 +78,33 @@ func TestState_OneIteration(t *testing.T) {
 		}
 		gammaStr := fmt.Sprintf("%f", 1.16+rand.Float64()/10)
 		state, err := NewState(input, gammaStr, ReductionFull, false)
+		_, err = state.checkAandB() // debug
 		assert.NoError(t, err)
 		var roundOffErrorAsString string
 		numIterations := 0 // needed outside the loop below
+		aCanBeRepresentedInInt64 := true
+		iterationsCheckingAandB := 0
 		for ; numIterations < maxIterations; numIterations++ {
 			var terminated bool
 			terminated, err = state.OneIteration(GetRClassic, true)
 			assert.NoError(t, err)
+
+			// Test GetRowOfA and GetColumnOfB
+			var aAndBAreInverses bool
+			if aCanBeRepresentedInInt64 {
+				aAndBAreInverses, err = state.checkAandB()
+				if err != nil {
+					if strings.Contains(err.Error(), "could not convert A") {
+						aCanBeRepresentedInInt64 = false
+						iterationsCheckingAandB = numIterations
+					}
+				} else {
+					assert.NoError(t, err)
+					assert.True(t, aAndBAreInverses)
+				}
+			}
+
+			// Test round-off
 			roundOffError := state.GetObservedRoundOffError()
 			_, roundOffErrorAsString = roundOffError.String()
 			assert.Truef(
@@ -119,6 +141,14 @@ func TestState_OneIteration(t *testing.T) {
 			numIterations, state.GetAllZeroRowsCalculated(), roundOffErrorAsString,
 			maxInt64DEntryAsStr, maxBigNumberDEntryAsStr, updatedRawX,
 		)
+		if aCanBeRepresentedInInt64 {
+			fmt.Printf("A remained expressible in int64\n")
+		} else {
+			fmt.Printf(
+				"A had an entry that could not be converted to int64 for the first time on iteration %d\n",
+				iterationsCheckingAandB,
+			)
+		}
 	}
 }
 
@@ -528,4 +558,39 @@ func (es *expectedState) checkSortedToUnsorted(t *testing.T, actual *State) {
 			t, eq, "raw[%d] = %q != %q = sorted[%d]", i, e0, a0, actual.sortedToUnsorted[i],
 		)
 	}
+}
+
+func (s *State) checkAandB() (bool, error) {
+	a := make([]int64, s.numRows*s.numRows)
+	b := make([]int64, s.numRows*s.numRows)
+	for i := 0; i < s.numRows; i++ {
+		var err error
+		var rowOfA, columnOfB []int64
+		rowOfA, err = s.GetRowOfA(i)
+		if err != nil {
+			return false, fmt.Errorf("checkAandB: could not get row %d of A: %q", i, err.Error())
+		}
+		columnOfB, err = s.GetColumnOfB(i)
+		if err != nil {
+			return false, fmt.Errorf("checkAandB: could not get row %d of B: %q", i, err.Error())
+		}
+		for j := 0; j < s.numRows; j++ {
+			a[i*s.numRows+j] = rowOfA[j]
+			b[j*s.numRows+i] = columnOfB[j]
+		}
+	}
+	//fmt.Printf("================= A:\n") // debug
+	//for i := 0; i < s.numRows; i++ {     // debug
+	//	fmt.Printf("%v\n", a[i*s.numRows:(i+1)*s.numRows]) // debug
+	//} // debug
+	//fmt.Printf("B:\n")               // debug
+	//for i := 0; i < s.numRows; i++ { // debug
+	//	fmt.Printf("%v\n", b[i*s.numRows:(i+1)*s.numRows]) // debug
+	//} // debug
+
+	aAndBAreInverses, err := util.IsInversePair(a, b, s.numRows)
+	if err != nil {
+		return false, fmt.Errorf("checkAandB: could not check whether A and B are inverses: %q", err.Error())
+	}
+	return aAndBAreInverses, nil
 }

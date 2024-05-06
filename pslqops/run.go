@@ -325,6 +325,43 @@ func (s *State) AboutToTerminate() (bool, error) {
 	return AboutToTerminate(s.h)
 }
 
+// GetRowOfA returns a column of B, which is an approximate or exact solution
+// of <x,.> = 0, depending on how far the algorithm has progressed.
+func (s *State) GetRowOfA(row int) ([]int64, error) {
+	sortedRow := make([]int64, s.numRows)
+	if s.useBigNumber {
+		for i := 0; i < s.numRows; i++ {
+			aEntryAsBigNumber, err := s.aBigNumberMatrix.Get(row, i)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"GetRowOfA: could not get A[%d][%d]: %q", row, i, err.Error(),
+				)
+			}
+			var aEntryAsInt64 int64
+			aEntryAsInt64, err = aEntryAsBigNumber.AsInt64()
+			if err != nil {
+				return nil, fmt.Errorf(
+					"GetRowOfA: could not convert A[%d][%d] as an integer: %q",
+					row, i, err.Error(),
+				)
+			}
+			sortedRow[i] = aEntryAsInt64
+		}
+	} else {
+		// s is not using bigNumbers so return the last column of s.aInt64Matrix
+		for i := 0; i < s.numRows; i++ {
+			sortedRow[i] = s.aInt64Matrix[row*s.numRows+i]
+		}
+	}
+
+	// Reorder to unsorted
+	retVal := make([]int64, s.numRows)
+	for i := 0; i < s.numRows; i++ {
+		retVal[i] = sortedRow[s.sortedToUnsorted[i]]
+	}
+	return retVal, nil
+}
+
 // GetColumnOfB returns a column of B, which is an approximate or exact solution
 // of <x,.> = 0, depending on how far the algorithm has progressed.
 func (s *State) GetColumnOfB(col int) ([]int64, error) {
@@ -334,14 +371,14 @@ func (s *State) GetColumnOfB(col int) ([]int64, error) {
 			bEntryAsBigNumber, err := s.bBigNumberMatrix.Get(i, col)
 			if err != nil {
 				return nil, fmt.Errorf(
-					"GetSolution: could not get B[%d][%d]: %q", i, col, err.Error(),
+					"GetColumnOfB: could not get B[%d][%d]: %q", i, col, err.Error(),
 				)
 			}
 			var bEntryAsInt64 int64
 			bEntryAsInt64, err = bEntryAsBigNumber.AsInt64()
 			if err != nil {
 				return nil, fmt.Errorf(
-					"GetSolution: could not convert B[%d][%d] as an integer: %q",
+					"GetColumnOfB: could not convert B[%d][%d] as an integer: %q",
 					i, col, err.Error(),
 				)
 			}
