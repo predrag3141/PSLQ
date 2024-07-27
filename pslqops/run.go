@@ -616,6 +616,68 @@ func GetRClassic(
 	return NewFromPermutation([]int{j, j + 1}, []int{1, 0})
 }
 
+// GetSwapUsingB returns a row operation in H that swaps a low-norm column of B with a higher norm
+// column. The column, j, that is replaced is the rightmost column with a norm larger than it would
+// have if the columns of B were sorted in descending order by their norms. The replacement of
+// column j is the column to the left of column j with the smallest norm.
+//
+// GetSwapUsingB is intended for the case where there are s.numCols solutions among the columns of B.
+// If this is not the case, GetSwapUsingB returns an error.
+func (s *State) GetSwapUsingB(maxOffset int) (*RowOperation, error) {
+	type indexSquaredNorm struct {
+		index int
+		value float64
+	}
+	solutions, err := s.GetSolutions()
+	if err != nil {
+		return nil, fmt.Errorf("GetSwapUsingB: could not get solutions: %q", err.Error())
+	}
+	norm := make([]float64, s.numCols)
+	solutionCount := 0
+	for j, solution := range solutions {
+		for k := 0; k < s.numRows; k++ {
+			norm[j] += float64(solution[k]) * float64(solution[k])
+		}
+		solutionCount++
+	}
+	if solutionCount != s.numCols {
+		return nil, fmt.Errorf("GetSwapUsingB: got %d != %d solutions", solutionCount, s.numCols)
+	}
+
+	// Iterate through columns j with a look-back of at least 2 and at most maxOffset
+	for j := 2; j < s.numCols; j++ {
+		start := j - maxOffset
+		if start < 0 {
+			start = 0
+		}
+		end := j - 2
+		for k := start; k <= end; k++ {
+			if norm[j] > norm[k] {
+				// norm increases from j to j+k, which needs fixing if possible. The score is
+				// how much larger H[j][j] becomes after swapping rows k and j.
+				var score float64
+				score, err = s.ScoreSubmatrixOfH()
+
+			}
+		}
+	}
+
+	fmt.Printf("\n=========================== norms:\n") ///////////////////////// debug
+	for j := 0; j < s.numCols; j++ {                     /////////////////////////////////////////////////// debug
+		fmt.Printf( ///////////////////////////////////////////////////////////////////// debug
+			"                             sorted norm: %v unsorted norm: %f\n", // debug
+			sortedNorms[j], unsortedNorms[j],                                   /////////////////////////////////////////// debug
+		) /////////////////////////////////////////////////////////////////////////////// debug
+	} /////////////////////////////////////////////////////////////////////////////////// debug
+	for j := s.numCols - 1; 0 <= j; j-- {
+		if math.Abs(sortedNorms[j].value-unsortedNorms[j]) > 0.5 {
+			// A good column to swap with column j is the sorted one
+			return NewFromPermutation([]int{sortedNorms[j].index, j}, []int{1, 0})
+		}
+	}
+	return nil, nil
+}
+
 func AboutToTerminate(h *bigmatrix.BigMatrix) (bool, error) {
 	lastEntry, err := h.Get(h.NumCols(), h.NumCols()-1)
 	if err != nil {
@@ -862,4 +924,31 @@ func (s *State) updateRoundOffError(firstIteration bool) error {
 	s.observedRoundOffError.Mul(s.observedRoundOffError, s.roundOffHistoryWeight)
 	s.observedRoundOffError.MulAdd(maxRoundOffError, s.roundOffCurrentWeight)
 	return nil
+}
+
+func (s *State) ScoreSubmatrixOfH(column, numRows int) (float64, error) {
+	// Get the sub-matrix
+	subMatrix := make([]float64, numRows*numRows)
+	for k := 0; k < numRows; k++ {
+		for m := 0; m <= k; m++ {
+			hkm, err := s.h.Get(column+k, column+m)
+			if err != nil {
+				return 0.0, fmt.Errorf(
+					"GetSwapUsingB: could not get H[%d][%d]: %q", column+k, column+m, err.Error(),
+				)
+			}
+			if !hkm.IsSmall() {
+				hmnAsFloat := hkm.AsFloat()
+				if hmnAsFloat.IsInf() {
+					return 0.0, nil
+				}
+				subMatrix[k*numRows+m], _ = hmnAsFloat.Float64()
+			}
+		}
+	}
+
+	// Swap the first and last rows, creating a corner to remove. Return the ratio of
+	// increase in |H[column+numRows-1][column+numRows-1]| before and after the swap and
+	// corner removal.
+	return 0.0, nil
 }

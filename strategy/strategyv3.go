@@ -7,7 +7,7 @@ import (
 	"github.com/predrag3141/PSLQ/pslqops"
 )
 
-type SwapReduceSolveV2 struct {
+type SwapReduceSolveV3 struct {
 	// Required to run swap-reduce-solve strategy
 	swapper *pslqops.RowOpGenerator
 	reducer *pslqops.BottomRightOfH
@@ -29,15 +29,15 @@ type SwapReduceSolveV2 struct {
 	DiagonalStatistics  *pslqops.DiagonalStatistics
 }
 
-func NewSwapReduceSolveV2(
+func NewSwapReduceSolve(
 	pslqContext *PSLQContext, log2ReductionThreshold, maxSwapsSinceReduction,
 	reductionMode int, gentlyReduceAllRows bool,
-) (*SwapReduceSolveV2, error) {
+) (*SwapReduceSolveV3, error) {
 	s, err := pslqops.NewState(pslqContext.InputAsDecimalString, "1.0", reductionMode, gentlyReduceAllRows)
 	if err != nil {
 		return nil, fmt.Errorf("NewSwapReduceSolve: could not create a new state: %q", err.Error())
 	}
-	return &SwapReduceSolveV2{
+	return &SwapReduceSolveV3{
 		swapper:                s.NewRowOpGenerator(),
 		reducer:                nil, // to be created whenever swapper.GetNextRowOperation returns nil
 		state:                  s,
@@ -50,7 +50,7 @@ func NewSwapReduceSolveV2(
 	}, nil
 }
 
-func (srs *SwapReduceSolveV2) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNumber) (*pslqops.RowOperation, error) {
+func (srs *SwapReduceSolveV3) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNumber) (*pslqops.RowOperation, error) {
 	// Try to obtain a row operation involving consecutive rows that improves the diagonal
 	retVal, err := srs.swapper.GetNextRowOperation()
 	if err != nil {
@@ -133,7 +133,7 @@ func (srs *SwapReduceSolveV2) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNum
 	return retVal, nil
 }
 
-func (srs *SwapReduceSolveV2) switchToFullReductionMode() (*pslqops.RowOperation, error) {
+func (srs *SwapReduceSolveV3) switchToFullReductionMode() (*pslqops.RowOperation, error) {
 	err := srs.state.SetReductionMode(pslqops.ReductionFull)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -157,15 +157,15 @@ func (srs *SwapReduceSolveV2) switchToFullReductionMode() (*pslqops.RowOperation
 }
 
 // getGeneralPairRowOp returns the best-scoring swap of two rows of H, which may or may
-// not be adjacent. If no swap of a pair of rows in H improves the diagonal of H,
+// not be adjacent. If no swap of a pair of rows in H improves the order of norms in B,
 // then getGeneralPairRowOp returns a swap of the last two rows of H. This signals
 // termination of the PSLQ algorithm.
-func (srs *SwapReduceSolveV2) getGeneralPairRowOp() (*pslqops.RowOperation, error) {
-	hPairStatistics, bestIndex, err := srs.state.GetHPairStatistics()
+func (srs *SwapReduceSolveV3) getGeneralPairRowOp() (*pslqops.RowOperation, error) {
+	rowOp, err := srs.state.GetSwapUsingB()
 	if err != nil {
-		return nil, fmt.Errorf("getR: could not obtain pair statistics: %q", err.Error())
+		return nil, fmt.Errorf("getR: could not use B to determine a swap: %q", err.Error())
 	}
-	if bestIndex < 0 {
+	if rowOp == nil {
 		// Signal termination. There are no more ways to improve the diagonal of H,
 		// or reduce diagonal elements.
 		err = srs.setDiagonalAndSolutions("getR")
@@ -180,20 +180,12 @@ func (srs *SwapReduceSolveV2) getGeneralPairRowOp() (*pslqops.RowOperation, erro
 			PermutationOfB: [][]int{},
 		}, nil
 	}
-	bestPair := hPairStatistics[bestIndex]
-	indices, operationOnH := bestPair.GetIndicesAndSubMatrix()
-	return &pslqops.RowOperation{
-		Indices:        indices,
-		OperationOnH:   operationOnH,
-		OperationOnB:   operationOnH,
-		PermutationOfH: [][]int{},
-		PermutationOfB: [][]int{},
-	}, nil
+	return rowOp, nil
 }
 
 // setDiagonalAndSolutions is a convenience function to set srs.DiagonalStatistics and
 // srs.Solutions when about to terminate the PSLQ algorithm.
-func (srs *SwapReduceSolveV2) setDiagonalAndSolutions(caller string) error {
+func (srs *SwapReduceSolveV3) setDiagonalAndSolutions(caller string) error {
 	var err error
 	srs.DiagonalStatistics, err = srs.state.GetDiagonal()
 	if err != nil {
