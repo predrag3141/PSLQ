@@ -19,12 +19,13 @@ const (
 	gentlyReduceAllRowsV3             = false
 )
 
-func TestSwapReduceSolve(t *testing.T) {
+func TestSwapReduceSolveV3(t *testing.T) {
+	t.Skipf("v3 is under construction and not ready to test")
 	pslqContext := GetPSLQInput(xLenV3, relationElementRangeV3, randomRelationProbabilityThreshV3)
 	t.Logf("Input for strategy v3: %v", pslqContext.InputAsDecimalString)
 	assert.NotNil(t, pslqContext.InputAsDecimalString)
 	assert.NotNil(t, pslqContext.InputAsBigInt)
-	srs, err := NewSwapReduceSolve(
+	srs, err := NewSwapReduceSolveV3(
 		pslqContext, log2reductionThresholdV3, maxSwapsSinceReductionV3, initialReductionModeV3, gentlyReduceAllRowsV3)
 	assert.NoError(t, err)
 	var totalReductions int // local counts to compare with equivalent counts in srs

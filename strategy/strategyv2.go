@@ -80,8 +80,8 @@ func (srs *SwapReduceSolveV2) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNum
 	}
 
 	// If srs.SolutionCount is maximal, a full basis of solutions has been found; try to find a
-	// general row operation -- one not involving consecutive rows. If there is none, then a swap of
-	// the last two rows of H is returned, signaling termination of the PSLQ algorithm.
+	// general row operation -- one not involving consecutive rows. If there is none, nil is
+	// returned, signaling termination of the PSLQ algorithm.
 	if srs.SolutionCount == srs.state.NumCols() {
 		if srs.SwapsSinceReduction > srs.maxSwapsSinceReduction {
 			// Too many consecutive identity D matrices call for termination, triggered
@@ -90,13 +90,7 @@ func (srs *SwapReduceSolveV2) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNum
 			if err != nil {
 				return nil, err
 			}
-			return &pslqops.RowOperation{
-				Indices:        []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
-				OperationOnH:   []int{0, 1, 1, 0},
-				OperationOnB:   []int{0, 1, 1, 0},
-				PermutationOfH: [][]int{},
-				PermutationOfB: [][]int{},
-			}, nil
+			return nil, nil
 		}
 		srs.TotalSwaps++
 		srs.SwapsSinceReduction++
@@ -158,8 +152,8 @@ func (srs *SwapReduceSolveV2) switchToFullReductionMode() (*pslqops.RowOperation
 
 // getGeneralPairRowOp returns the best-scoring swap of two rows of H, which may or may
 // not be adjacent. If no swap of a pair of rows in H improves the diagonal of H,
-// then getGeneralPairRowOp returns a swap of the last two rows of H. This signals
-// termination of the PSLQ algorithm.
+// then getGeneralPairRowOp returns a nil row operation. This signals termination of the
+// PSLQ algorithm.
 func (srs *SwapReduceSolveV2) getGeneralPairRowOp() (*pslqops.RowOperation, error) {
 	hPairStatistics, bestIndex, err := srs.state.GetHPairStatistics()
 	if err != nil {
@@ -172,13 +166,7 @@ func (srs *SwapReduceSolveV2) getGeneralPairRowOp() (*pslqops.RowOperation, erro
 		if err != nil {
 			return nil, err
 		}
-		return &pslqops.RowOperation{
-			Indices:        []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
-			OperationOnH:   []int{0, 1, 1, 0},
-			OperationOnB:   []int{0, 1, 1, 0},
-			PermutationOfH: [][]int{},
-			PermutationOfB: [][]int{},
-		}, nil
+		return nil, nil
 	}
 	bestPair := hPairStatistics[bestIndex]
 	indices, operationOnH := bestPair.GetIndicesAndSubMatrix()

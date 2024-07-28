@@ -20,12 +20,11 @@ const (
 )
 
 func TestSwapReduceSolveV2(t *testing.T) {
-	t.Skipf("Strategy V2 is replaced by Strategy V3 and its successors")
 	pslqContext := GetPSLQInput(xLenV2, relationElementRangeV2, randomRelationProbabilityThreshV2)
 	t.Logf("Input for strategy v2: %v", pslqContext.InputAsDecimalString)
 	assert.NotNil(t, pslqContext.InputAsDecimalString)
 	assert.NotNil(t, pslqContext.InputAsBigInt)
-	srs, err := NewSwapReduceSolve(
+	srs, err := NewSwapReduceSolveV2(
 		pslqContext, log2reductionThresholdV2, maxSwapsSinceReductionV2, initialReductionModeV2, gentlyReduceAllRowsV2)
 	assert.NoError(t, err)
 	var totalReductions int // local counts to compare with equivalent counts in srs

@@ -209,7 +209,8 @@ type bestScoreType struct {
 //	     by cornering, changes K(j) to a sub-matrix with its larger diagonal
 //	     element in row j+1.
 //
-// If there is no such j, GetFirstImprovement returns h.NumCols()-1
+// If there is no such j, GetFirstImprovement returns the row operation that swaps
+// the last two rows of h
 func GetFirstImprovement(
 	h *bigmatrix.BigMatrix, startingJ, maxB int, requireDiagonalSwap ...bool,
 ) (
@@ -333,10 +334,11 @@ func GetFirstImprovement(
 		), nil
 	}
 
-	// No diagonal swap was found. The last two rows need to be swapped, since either
+	// No diagonal swap was found. PSLQ should be terminated with a nil row operation,
+	// since either
 	// - Diagonal swaps are required, or
 	// - Diagonal swaps are not required, but no diagonal improvement was found
-	return pslqops.NewFromPermutation([]int{endingJ, endingJ + 1}, []int{1, 0})
+	return nil, nil
 }
 
 func ImproveDiagonalNever(
@@ -363,7 +365,7 @@ func getR(
 	h *bigmatrix.BigMatrix, powersOfGamma []*bignumber.BigNumber, whenToImprove int,
 ) (*pslqops.RowOperation, error) {
 	lastCol := h.NumCols() - 1
-	var err error
+	aboutToTerminate, err := pslqops.AboutToTerminate(h)
 	improveDiagonal := false // default whenToImprove is improveDiagonalNever
 	switch whenToImprove {
 	case improveDiagonalWhenAboutToTerminate:
@@ -382,8 +384,6 @@ func getR(
 		// element of H, the code block simply returns j=lastCol so the algorithm
 		// terminates. Otherwise, it tries to move the largest diagonal element towards
 		// H[lastCol][lastCol].
-		var aboutToTerminate bool
-		aboutToTerminate, err = pslqops.AboutToTerminate(h)
 		improveDiagonal = aboutToTerminate
 		break
 	case improveDiagonalAlways:
@@ -400,8 +400,9 @@ func getR(
 			)
 		}
 		if startingJ == lastCol {
-			// The maximum is already in the last column
-			return pslqops.NewFromPermutation([]int{lastCol, lastCol + 1}, []int{1, 0})
+			// The maximum is already in the last column. Terminate by returning a
+			// nil row operation.
+			return nil, nil
 		}
 
 		// The maximum is before the last column and needs to be moved down, if possible
@@ -413,7 +414,7 @@ func getR(
 				startingJ, startingJ, err.Error(),
 			)
 		}
-		if rowOperation.Indices[0] == lastCol {
+		if (rowOperation != nil) && (rowOperation.Indices[0] == lastCol) {
 			// No diagonal swap was found to improve the diagonal. Try not requiring a swap
 			rowOperation, err = GetFirstImprovement(h, startingJ, maxB, false)
 			if err != nil {
@@ -422,6 +423,9 @@ func getR(
 					startingJ, startingJ, err.Error(),
 				)
 			}
+
+			// If no diagonal improvement could be found, then rowOperation should be nil,
+			// which signals PSLQ to terminate.
 			return rowOperation, nil
 		}
 
@@ -439,6 +443,11 @@ func getR(
 			"GetRImprovingDiagonal: could not get maximum diagonal element of H: %q",
 			err.Error(),
 		)
+	}
+	if aboutToTerminate && (j == lastCol) {
+		// The last element of H *is* small, so the strategy does not call for improving
+		// the diagonal. Signal termination of the PSLQ algorithm.
+		return nil, nil
 	}
 	return pslqops.NewFromPermutation([]int{j, j + 1}, []int{1, 0})
 }

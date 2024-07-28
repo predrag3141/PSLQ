@@ -266,7 +266,7 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 							needDiagonalSwap = 1
 						}
 						expectedSubMatrix := make([]int, 2)
-						if expectedRowOperation.IsPermutation() {
+						if (expectedRowOperation == nil) || expectedRowOperation.IsPermutation() {
 							// For reporting purposes, simulate what the matrix would have been
 							// if the row operation were not a permutation, namely rows [0,1] and
 							// [1,0].
@@ -275,8 +275,14 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 							expectedSubMatrix[0], expectedSubMatrix[1] =
 								expectedRowOperation.OperationOnH[0], expectedRowOperation.OperationOnH[1]
 						}
-						key := 1000000*hType + 100000*needDiagonalSwap + 10000*startingJ +
-							1000*expectedRowOperation.Indices[0] + 100*(expectedSubMatrix[0]+1) + 10*expectedSubMatrix[1] + requireDiagonalSwapAsInt
+						var key int
+						if expectedRowOperation == nil {
+							key = 1000000*hType + 100000*needDiagonalSwap + 10000*startingJ +
+								1000*(numCols-1) + 100*(expectedSubMatrix[0]+1) + 10*expectedSubMatrix[1] + requireDiagonalSwapAsInt
+						} else {
+							key = 1000000*hType + 100000*needDiagonalSwap + 10000*startingJ +
+								1000*expectedRowOperation.Indices[0] + 100*(expectedSubMatrix[0]+1) + 10*expectedSubMatrix[1] + requireDiagonalSwapAsInt
+						}
 						counts[key] = counts[key] + 1
 
 						// Actual results need to be calculated
@@ -293,8 +299,12 @@ func TestGetFirstDiagonalSwap(t *testing.T) {
 
 						// Expected and actual need to be compared.
 						assert.NoError(t, err)
-						equals := expectedRowOperation.Equals(actualRowOperation)
-						assert.True(t, equals, reason)
+						if expectedRowOperation == nil {
+							assert.Nil(t, actualRowOperation)
+						} else {
+							equals := expectedRowOperation.Equals(actualRowOperation)
+							assert.True(t, equals, reason)
+						}
 
 						// Loop update
 						supplyFinalParamExplicitly = !supplyFinalParamExplicitly
@@ -378,6 +388,7 @@ type v1TestOutput struct {
 }
 
 func TestGetRImprovingDiagonal(t *testing.T) {
+	t.Skipf("This test is replaced by strategy v2 or higher")
 	const minLength = 10
 	const lengthIncr = 10 // 45
 	const maxLength = 20  // 100
@@ -666,9 +677,9 @@ func getExpectedJABCD(
 		)
 		return rowOperation, reason
 	}
-	rowOperation, err := pslqops.NewFromPermutation([]int{numCols - 1, numCols}, []int{1, 0})
-	assert.NoError(t, err)
-	return rowOperation, fmt.Sprintf(
+	//rowOperation, err := pslqops.NewFromPermutation([]int{numCols - 1, numCols}, []int{1, 0})
+	//assert.NoError(t, err)
+	return nil, fmt.Sprintf(
 		"In expected results, no improvement was found\n%s\n", reason,
 	)
 }

@@ -29,7 +29,7 @@ type SwapReduceSolveV3 struct {
 	DiagonalStatistics  *pslqops.DiagonalStatistics
 }
 
-func NewSwapReduceSolve(
+func NewSwapReduceSolveV3(
 	pslqContext *PSLQContext, log2ReductionThreshold, maxSwapsSinceReduction,
 	reductionMode int, gentlyReduceAllRows bool,
 ) (*SwapReduceSolveV3, error) {
@@ -103,7 +103,7 @@ func (srs *SwapReduceSolveV3) getR(h *bigmatrix.BigMatrix, _ []*bignumber.BigNum
 
 		// getGeneralRowOp may fail to find a general row operation. In that case, it returns a
 		// swap of the last two rows, terminating the PSLQ algorithm.
-		return srs.getGeneralPairRowOp()
+		return srs.getRefinementRowOp()
 	}
 
 	// There is no swap of consecutive rows that improves the diagonal, and there are still
@@ -160,27 +160,8 @@ func (srs *SwapReduceSolveV3) switchToFullReductionMode() (*pslqops.RowOperation
 // not be adjacent. If no swap of a pair of rows in H improves the order of norms in B,
 // then getGeneralPairRowOp returns a swap of the last two rows of H. This signals
 // termination of the PSLQ algorithm.
-func (srs *SwapReduceSolveV3) getGeneralPairRowOp() (*pslqops.RowOperation, error) {
-	rowOp, err := srs.state.GetSwapUsingB()
-	if err != nil {
-		return nil, fmt.Errorf("getR: could not use B to determine a swap: %q", err.Error())
-	}
-	if rowOp == nil {
-		// Signal termination. There are no more ways to improve the diagonal of H,
-		// or reduce diagonal elements.
-		err = srs.setDiagonalAndSolutions("getR")
-		if err != nil {
-			return nil, err
-		}
-		return &pslqops.RowOperation{
-			Indices:        []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
-			OperationOnH:   []int{0, 1, 1, 0},
-			OperationOnB:   []int{0, 1, 1, 0},
-			PermutationOfH: [][]int{},
-			PermutationOfB: [][]int{},
-		}, nil
-	}
-	return rowOp, nil
+func (srs *SwapReduceSolveV3) getRefinementRowOp() (*pslqops.RowOperation, error) {
+	return nil, nil
 }
 
 // setDiagonalAndSolutions is a convenience function to set srs.DiagonalStatistics and
