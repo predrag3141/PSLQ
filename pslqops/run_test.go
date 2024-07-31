@@ -86,7 +86,7 @@ func TestState_OneIteration(t *testing.T) {
 		iterationsCheckingAandB := 0
 		for ; numIterations < maxIterations; numIterations++ {
 			var terminated bool
-			terminated, err = state.OneIteration(GetRClassic, true)
+			terminated, err = state.OneIteration(GetRClassic, nil, true)
 			assert.NoError(t, err)
 
 			// Test GetRowOfA and GetColumnOfB

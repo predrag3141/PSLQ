@@ -55,6 +55,57 @@ func permuteRows(x []int64, numCols int, cycles [][]int, caller string) error {
 	return nil
 }
 
+// PermuteRowsFloat64 performs the following row operation on matrix x:
+// row cycles[i][0] -> row cycles[i][1], row cycles[i][1] -> row cycles[i][2], etc.
+// for i in {0,...,len(cycles)-1}.
+//
+// Each cycles[i][j] must contain a valid row number for x, or an error is returned.
+// PermuteRows does not verify that cycles represents a valid permutation of the
+// rows of bm.
+func permuteRowsFloat64(x []float64, numCols int, cycles [][]int, caller string) error {
+	if len(cycles) == 0 {
+		return fmt.Errorf("PermuteRowsFloat64: permutation was empty")
+	}
+	xLen := len(x)
+	for i := 0; i < len(cycles); i++ {
+		cycleLen := len(cycles[i])
+		overwritten := make([]float64, numCols)
+		for j := 0; j < cycleLen; j++ {
+			sourceRow := cycles[i][j]
+			var destRow int
+			if j+1 == cycleLen {
+				destRow = cycles[i][0]
+			} else {
+				destRow = cycles[i][j+1]
+			}
+			if (destRow+1)*numCols > xLen {
+				return fmt.Errorf(
+					"%s: some or all of row %d of x is missing", caller, destRow,
+				)
+			}
+			if (sourceRow+1)*numCols > xLen {
+				return fmt.Errorf(
+					"%s: some or all of row %d of x is missing", caller, sourceRow,
+				)
+			}
+			for k := 0; k < numCols; k++ {
+				var sourceEntry float64
+				if j == 0 {
+					// In this iteration of the cycle, overwritten is an array of 0s
+					sourceEntry = x[sourceRow*numCols+k]
+				} else {
+					// In this iteration of the cycle, overwritten contains the contents
+					// of the row just overwritten from before it was overwritten.
+					sourceEntry = overwritten[k]
+				}
+				overwritten[k] = x[destRow*numCols+k]
+				x[destRow*numCols+k] = sourceEntry
+			}
+		}
+	}
+	return nil
+}
+
 // permuteColumns performs the column operation on matrix x:
 // column cycles[i][0] -> column cycles[i][1], column cycles[i][1] -> column cycles[i][2], etc.
 // for i in {0,...,len(cycles)-1}.

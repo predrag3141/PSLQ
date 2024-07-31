@@ -10,6 +10,7 @@ import (
 )
 
 func TestPermuteRowsAndCols(t *testing.T) {
+	// TODO - Test permuteRowsFloat64
 	const minSeed = 108754
 	const seedIncr = 2349
 	const numTests = 100

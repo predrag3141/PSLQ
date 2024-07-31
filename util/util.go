@@ -67,6 +67,17 @@ func DotProduct(x []int64, xNumCols int, y []int64, yNumCols, row, column, start
 	return retVal
 }
 
+// DotProductFloat64 returns sum(x[row][k] y[k][column]). dotProduct trusts its inputs.
+// DotProduct mirrors bigmatrix.Int64DotProduct(), as a way of providing semi-
+// re-usable code.
+func DotProductFloat64(x []int64, xNumCols int, y []float64, yNumCols, row, column, start, end int) float64 {
+	retVal := float64(x[row*xNumCols+start]) * y[start*yNumCols+column]
+	for k := start + 1; k < end; k++ {
+		retVal += float64(x[row*xNumCols+k]) * y[k*yNumCols+column]
+	}
+	return retVal
+}
+
 // getDimensions returns the dimensions m and p for a matrix multiply
 // xy where x has mn entries, y has np entries, and the number of columns
 // in x (= the number of rows in y) is n.

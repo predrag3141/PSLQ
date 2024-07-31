@@ -20,6 +20,7 @@ const (
 )
 
 func TestGivensRotation(t *testing.T) {
+	// TODO - Test GivensRotationFloat64
 	// The first three rows and columns of h are the same as in an example
 	// from https://en.wikipedia.org/wiki/Givens_rotation as of July 30, 2023. The
 	// result of the two Givens transformations should match the equivalent result
@@ -65,6 +66,7 @@ func TestGivensRotation(t *testing.T) {
 }
 
 func TestPerformRowOp(t *testing.T) {
+	// TODO - Test PerformRowOpFloat64
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 100
@@ -105,11 +107,12 @@ func TestPerformRowOp(t *testing.T) {
 				subMatrix, subMatrixInverse, err = util.CreateInversePair(numIndices)
 				assert.NoError(t, err)
 				rowOperation = &RowOperation{
-					Indices:        indices,
-					OperationOnH:   subMatrix,
-					OperationOnB:   subMatrixInverse,
-					PermutationOfH: [][]int{},
-					PermutationOfB: [][]int{},
+					Indices:            indices,
+					OperationOnH:       subMatrix,
+					OperationOnB:       subMatrixInverse,
+					PermutationOfH:     [][]int{},
+					PermutationOfB:     [][]int{},
+					RightmostColumnOfQ: nil,
 				}
 				break
 			default:
@@ -139,6 +142,7 @@ func TestPerformRowOp(t *testing.T) {
 }
 
 func TestRemoveCorner(t *testing.T) {
+	// TODO - Test RemoveCornerFloat64
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 100
@@ -212,11 +216,12 @@ func TestRemoveCorner(t *testing.T) {
 				intA, intB, err = util.CreateInversePair(numIndices)
 				assert.NoError(t, err)
 				rowOperation = &RowOperation{
-					Indices:        indices,
-					OperationOnH:   intA,
-					OperationOnB:   intB,
-					PermutationOfH: [][]int{},
-					PermutationOfB: [][]int{},
+					Indices:            indices,
+					OperationOnH:       intA,
+					OperationOnB:       intB,
+					PermutationOfH:     [][]int{},
+					PermutationOfB:     [][]int{},
+					RightmostColumnOfQ: nil,
 				}
 				expectedDeterminant = detH(t, h)
 				break

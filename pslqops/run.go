@@ -29,10 +29,12 @@ const (
 // State holds the state of a running PSLQ algorithm
 type State struct {
 	useBigNumber                  bool // whether the client should switch to using BigNumberState
+	useFloat64H                   bool
 	rawX                          *bigmatrix.BigMatrix
 	sortedToUnsorted              []int
 	updatedRawX                   *bigmatrix.BigMatrix
 	h                             *bigmatrix.BigMatrix
+	hFloat64                      []float64
 	aInt64Matrix                  []int64
 	bInt64Matrix                  []int64
 	dInt64Matrix                  []int64
@@ -76,10 +78,12 @@ func NewState(input []string, gammaStr string, reductionMode int, gentlyReduceAl
 	}
 	retVal := &State{
 		useBigNumber:             false,
+		useFloat64H:              false,
 		rawX:                     rawX,
 		updatedRawX:              bigmatrix.NewEmpty(1, len(input)),
 		sortedToUnsorted:         make([]int, len(input)),
 		h:                        nil,
+		hFloat64:                 nil,
 		aInt64Matrix:             make([]int64, len(input)*len(input)),
 		bInt64Matrix:             make([]int64, len(input)*len(input)),
 		dInt64Matrix:             make([]int64, len(input)*len(input)),
@@ -188,7 +192,8 @@ func NewState(input []string, gammaStr string, reductionMode int, gentlyReduceAl
 // gamma^j |H[j][j]| is maximized. getR() should pass to maxJ the two
 // parameters, s.h and s.powersOfGamma, of getR(), described above.
 func (s *State) OneIteration(
-	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) (*RowOperation, error), checkInvariantsOptional ...bool,
+	getR func(*bigmatrix.BigMatrix, []*bignumber.BigNumber) (*RowOperation, error),
+	getRFloat64 func([]float64, int, int) (*RowOperation, error), checkInvariantsOptional ...bool,
 ) (bool, error) {
 	// Initializations
 	checkInvariants := false
@@ -212,7 +217,11 @@ func (s *State) OneIteration(
 
 	// Step 2 of this PSLQ iteration
 	var rowOperation *RowOperation
-	rowOperation, err = getR(s.h, s.powersOfGamma)
+	if s.useFloat64H {
+		rowOperation, err = getRFloat64(s.hFloat64, s.numRows, s.numCols)
+	} else {
+		rowOperation, err = getR(s.h, s.powersOfGamma)
+	}
 	if err != nil {
 		return false, fmt.Errorf("OneIteration: could not get R: %q", err.Error())
 	}
@@ -296,6 +305,10 @@ func (s *State) GetUpdatedRawX() *bigmatrix.BigMatrix {
 //
 // The elements of the returned diagonal are deep copies.
 func (s *State) GetDiagonal() (*DiagonalStatistics, error) {
+	if s.useFloat64H {
+		// GetDiagonal is not used in conjunction with H in float64 format
+		return nil, nil
+	}
 	return NewDiagonalStatistics(s.h)
 }
 
@@ -325,6 +338,11 @@ func (s *State) GetSolutions() (map[int][]int64, error) {
 
 // AboutToTerminate returns whether the last entry in the last row of s.h is small
 func (s *State) AboutToTerminate() (bool, error) {
+	if s.useFloat64H {
+		// AboutToTerminate is not used in conjunction with H in float64 format
+		// because PSLQ is always ready to terminate in that case
+		return true, nil
+	}
 	return AboutToTerminate(s.h)
 }
 
@@ -413,27 +431,11 @@ func (s *State) NumRows() int {
 }
 
 func (s *State) NewRowOpGenerator() *RowOpGenerator {
+	if s.useFloat64H {
+		// RowOpGenerator is not used in conjunction with H in float64 format
+		return nil
+	}
 	return NewRowOpGenerator(s.h)
-}
-
-// GetBottomRightOfH returns t, u, v, w in the bottom-right of H for which zeroes appear
-// as shown below, along with the row number in which u appears; or if zeroes in this
-// pattern do not exist, GetBottomRightOfH returns the bottom-right 3x2 sub-matrix of H,
-// which has the same form as the first two columns shown below. In the latter case, the
-// row number returned is numRows-3, because t appears in that row.
-//
-//	_             _
-//
-// |  t  0  0 ...  |
-// |  u  v  0 ...  |
-// |  ...          |
-// |_ *  w  0 ... _|
-//
-// A strategy can use such t, u, v, w, and row number to define a row operation that reduces
-// w just enough to swap the largest diagonal element down and to the right in the 2x2 sub-
-// matrix whose upper-left element is t.
-func (s *State) GetBottomRightOfH() (*BottomRightOfH, error) {
-	return GetBottomRightOfH(s.h)
 }
 
 // GetHPairStatistics returns an array, hp, of HPairStatistics and the index i into hp
@@ -441,19 +443,27 @@ func (s *State) GetBottomRightOfH() (*BottomRightOfH, error) {
 // diagonal of H, the returned index is -1. A strategy could be to swap rows hp[i].j0
 // and hp[i].j1.
 func (s *State) GetHPairStatistics() ([]HPairStatistics, int, error) {
+	if s.useFloat64H {
+		// HPairStatistics is not used in conjunction with H in float64 format
+		return nil, 0, nil
+	}
 	return getHPairStatistics(s.h)
 }
 
 func (s *State) CheckInvariants(context string) error {
-	for i := 0; i < s.numRows; i++ {
-		for j := i + 1; j < s.numCols; j++ {
-			hij, err := s.h.Get(i, j)
-			if err != nil {
-				return fmt.Errorf("CheckInvariants: could not get H[%d][%d]: %q", i, j, err.Error())
-			}
-			if !hij.IsSmall() {
-				_, hijAsStr := hij.String()
-				return fmt.Errorf("CheckInvariants (%s): H[%d][%d] = %q is not small", context, i, j, hijAsStr)
+	if !s.useFloat64H {
+		for i := 0; i < s.numRows; i++ {
+			for j := i + 1; j < s.numCols; j++ {
+				hij, err := s.h.Get(i, j)
+				if err != nil {
+					return fmt.Errorf(
+						"CheckInvariants: could not get H[%d][%d]: %q", i, j, err.Error(),
+					)
+				}
+				if !hij.IsSmall() {
+					_, hijAsStr := hij.String()
+					return fmt.Errorf("CheckInvariants (%s): H[%d][%d] = %q is not small", context, i, j, hijAsStr)
+				}
 			}
 		}
 	}
@@ -477,7 +487,8 @@ func (s *State) CheckInvariants(context string) error {
 		if err != nil {
 			return fmt.Errorf(
 				"CheckInvariants (%s): could not create BigNumber matrix A: %q",
-				context, err.Error())
+				context, err.Error(),
+			)
 		}
 		bBigNumberMatrix, err = bigmatrix.NewFromInt64Array(s.bInt64Matrix, s.numRows, s.numRows)
 		if err != nil {
@@ -528,14 +539,25 @@ func (s *State) CheckInvariants(context string) error {
 	// Check that H has been reduced.
 	var hIsReduced bool
 	var row, col int
-	hIsReduced, row, col, err = isReduced(s.h, s.reductionMode, s.gentlyReduceAllRows, -10, context)
+	if s.useFloat64H {
+		hIsReduced, row, col, err = isReducedFloat64(
+			s.hFloat64, s.numRows, s.numCols, -10, context,
+		)
+	} else {
+		hIsReduced, row, col, err = isReduced(
+			s.h, s.reductionMode, s.gentlyReduceAllRows, -10, context, // s.useFloat64H
+		)
+	}
 	if err != nil {
 		return fmt.Errorf(
-			"checkInvariants (%s): error determining whether H is reduced: %q", context, err.Error(),
+			"checkInvariants (%s): error determining whether H is reduced: %q",
+			context, err.Error(),
 		)
 	}
 	if !hIsReduced {
-		return fmt.Errorf("checkInvariants (%s): H[%d][%d] is not reduced. H=\n%v", context, row, col, s.h)
+		return fmt.Errorf("checkInvariants (%s): H[%d][%d] is not reduced. H=\n%v",
+			context, row, col, s.h, // s.useFloat64H
+		)
 	}
 	return nil
 }
@@ -626,16 +648,26 @@ func (s *State) step1() error {
 	var err error
 
 	if s.useBigNumber {
-		maxEntry, isIdentity, calculatedAllZeroRow, err = GetBigNumberD(
-			s.h, s.reductionMode, s.gentlyReduceAllRows, s.dBigNumberMatrix,
-		)
+		if s.useFloat64H {
+			maxEntry, isIdentity, calculatedAllZeroRow, err = GetBigNumberDFloat64(
+				s.hFloat64, s.numRows, s.numCols, s.dBigNumberMatrix,
+			)
+		} else {
+			maxEntry, isIdentity, calculatedAllZeroRow, err = GetBigNumberD(
+				s.h, s.reductionMode, s.gentlyReduceAllRows, s.dBigNumberMatrix,
+			)
+		}
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not compute big matrix D: %q", err.Error())
 		}
 		if calculatedAllZeroRow {
 			s.allZeroRowsCalculated++
 		}
-		err = BigNumberReduceH(s.h, s.dBigNumberMatrix)
+		if s.useFloat64H {
+			err = BigNumberReduceHFloat64(s.hFloat64, s.numRows, s.numCols, s.dBigNumberMatrix)
+		} else {
+			err = BigNumberReduceH(s.h, s.dBigNumberMatrix)
+		}
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not reduce H usingBigNumber D: %q", err.Error())
 		}
@@ -643,16 +675,26 @@ func (s *State) step1() error {
 			s.maxBigNumberDMatrixEntry.Set(maxEntry)
 		}
 	} else {
-		maxEntry, isIdentity, calculatedAllZeroRow, err = GetInt64D(
-			s.h, s.reductionMode, s.gentlyReduceAllRows, s.dInt64Matrix,
-		)
+		if s.useFloat64H {
+			maxEntry, isIdentity, calculatedAllZeroRow, err = GetInt64DFloat64(
+				s.hFloat64, s.numRows, s.numCols, s.dInt64Matrix,
+			)
+		} else {
+			maxEntry, isIdentity, calculatedAllZeroRow, err = GetInt64D(
+				s.h, s.reductionMode, s.gentlyReduceAllRows, s.dInt64Matrix,
+			)
+		}
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not compute []int64 D: %q", err.Error())
 		}
 		if calculatedAllZeroRow {
 			s.allZeroRowsCalculated++
 		}
-		err = Int64ReduceH(s.h, s.dInt64Matrix)
+		if s.useFloat64H {
+			err = Int64ReduceHFloat64(s.hFloat64, s.numRows, s.numCols, s.dInt64Matrix)
+		} else {
+			err = Int64ReduceH(s.h, s.dInt64Matrix)
+		}
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not reduce H using []int64 D: %q", err.Error())
 		}
@@ -675,14 +717,24 @@ func (s *State) step1() error {
 }
 
 func (s *State) step3(rowOperation *RowOperation) error {
+	var err error
+
 	// Update H
-	err := PerformRowOp(s.h, rowOperation)
+	if s.useFloat64H {
+		err = PerformRowOpFloat64(s.hFloat64, s.numRows, s.numCols, rowOperation)
+	} else {
+		err = PerformRowOp(s.h, rowOperation)
+	}
 	if err != nil {
 		return fmt.Errorf("OneIteration: could not left-multiply H: %q", err.Error())
 	}
 	if rowOperation.Indices[len(rowOperation.Indices)-1] <= s.numCols-1 {
 		// Since rowOperation does not just swap the last two rows, a corner needs removing
-		err = RemoveCorner(s.h, rowOperation)
+		if s.useFloat64H {
+			err = RemoveCornerFloat64(s.hFloat64, s.NumRows(), s.NumCols(), rowOperation)
+		} else {
+			err = RemoveCorner(s.h, rowOperation)
+		}
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not right-multiply H: %q", err.Error())
 		}
@@ -700,6 +752,7 @@ func (s *State) step3(rowOperation *RowOperation) error {
 			return fmt.Errorf("OneIteration: could not compute big matrix E: %q", err.Error())
 		}
 	} else {
+		var err error
 		eInt64Matrix, hasLargeEntry, err = GetInt64E(s.dInt64Matrix, s.numRows)
 		if err != nil {
 			return fmt.Errorf("OneIteration: could not compute []int64 E: %q", err.Error())
@@ -831,7 +884,32 @@ func (s *State) convertToBigNumber() error {
 	return nil
 }
 
+func (s *State) ConvertToFloat64() error {
+	numRows, numCols := s.h.Dimensions()
+	s.hFloat64 = make([]float64, numRows, numCols)
+	for i := 0; i < numCols; i++ {
+		for j := 0; j <= i; j++ {
+			hij, err := s.h.Get(i, j)
+			if err != nil {
+				return fmt.Errorf("convertToFloat64: could not get H[%d][%d]: %q", i, j, err.Error())
+			}
+			hijAsFloat := hij.AsFloat()
+			hijAsFloat64, _ := hijAsFloat.Float64()
+			if math.IsInf(hijAsFloat64, 0) {
+				return fmt.Errorf("convertToFloat64: H[%d][%d] is infinite", i, j)
+			}
+			s.hFloat64[i*numCols+j] = hijAsFloat64
+		}
+	}
+	s.useFloat64H = true
+	return nil
+}
+
 func (s *State) updateRoundOffError(firstIteration bool) error {
+	if s.useFloat64H {
+		// round-off error should be essentially zero for all solution columns of B
+		return nil
+	}
 	var err error
 	var oneRoundOffError *bignumber.BigNumber
 	maxRoundOffError := bignumber.NewFromInt64(0)
@@ -854,31 +932,4 @@ func (s *State) updateRoundOffError(firstIteration bool) error {
 	s.observedRoundOffError.Mul(s.observedRoundOffError, s.roundOffHistoryWeight)
 	s.observedRoundOffError.MulAdd(maxRoundOffError, s.roundOffCurrentWeight)
 	return nil
-}
-
-func (s *State) ScoreSubmatrixOfH(column, numRows int) (float64, error) {
-	// Get the sub-matrix
-	subMatrix := make([]float64, numRows*numRows)
-	for k := 0; k < numRows; k++ {
-		for m := 0; m <= k; m++ {
-			hkm, err := s.h.Get(column+k, column+m)
-			if err != nil {
-				return 0.0, fmt.Errorf(
-					"GetSwapUsingB: could not get H[%d][%d]: %q", column+k, column+m, err.Error(),
-				)
-			}
-			if !hkm.IsSmall() {
-				hmnAsFloat := hkm.AsFloat()
-				if hmnAsFloat.IsInf() {
-					return 0.0, nil
-				}
-				subMatrix[k*numRows+m], _ = hmnAsFloat.Float64()
-			}
-		}
-	}
-
-	// Swap the first and last rows, creating a corner to remove. Return the ratio of
-	// increase in |H[column+numRows-1][column+numRows-1]| before and after the swap and
-	// corner removal.
-	return 0.0, nil
 }

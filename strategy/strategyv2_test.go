@@ -29,7 +29,7 @@ func TestSwapReduceSolveV2(t *testing.T) {
 	assert.NoError(t, err)
 	var totalReductions int // local counts to compare with equivalent counts in srs
 	var totalReports int
-	for terminated := false; !terminated; terminated, err = srs.state.OneIteration(srs.getR, true) {
+	for terminated := false; !terminated; terminated, err = srs.state.OneIteration(srs.getR, nil, true) {
 		if err != nil {
 			fmt.Printf("TestSwapReduceSolve - error in OneIteration: %q", err.Error())
 			return

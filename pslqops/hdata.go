@@ -222,11 +222,12 @@ func updateRecentRowOperations(
 			)
 		}
 		recentRowOpsAndScores[2].RowOp = &RowOperation{
-			Indices:        []int{j, j + 1},
-			OperationOnH:   []int{},
-			OperationOnB:   []int{},
-			PermutationOfH: [][]int{{j, j + 1}},
-			PermutationOfB: [][]int{{j, j + 1}},
+			Indices:            []int{j, j + 1},
+			OperationOnH:       []int{},
+			OperationOnB:       []int{},
+			PermutationOfH:     [][]int{{j, j + 1}},
+			PermutationOfB:     [][]int{{j, j + 1}},
+			RightmostColumnOfQ: nil,
 		}
 	} else if (generalRowOp != nil) && (generalRowOpScore.Cmp(tSq) < 0) {
 		// See comments for the "if true" case above. Negating them for this "else" case,
@@ -327,11 +328,12 @@ func getGeneralRowOperation(
 				retScore.Set(thisScore)
 				det := r[0]*r[3] - r[1]*r[2]
 				retRowOp = &RowOperation{
-					Indices:        []int{j, j + 1},
-					OperationOnH:   []int{r[0], r[1], r[2], r[3]},
-					OperationOnB:   []int{det * r[3], -det * r[1], -det * r[2], det * r[0]},
-					PermutationOfH: [][]int{},
-					PermutationOfB: [][]int{},
+					Indices:            []int{j, j + 1},
+					OperationOnH:       []int{r[0], r[1], r[2], r[3]},
+					OperationOnB:       []int{det * r[3], -det * r[1], -det * r[2], det * r[0]},
+					PermutationOfH:     [][]int{},
+					PermutationOfB:     [][]int{},
+					RightmostColumnOfQ: nil,
 				}
 			}
 
@@ -464,8 +466,9 @@ func (brh *BottomRightOfH) Reduce(maxRowOpEntry, log2threshold int) (*RowOperati
 		OperationOnB: []int{
 			det * operationOnH[3], -det * operationOnH[1], -det * operationOnH[2], det * operationOnH[0],
 		},
-		PermutationOfH: [][]int{},
-		PermutationOfB: [][]int{},
+		PermutationOfH:     [][]int{},
+		PermutationOfB:     [][]int{},
+		RightmostColumnOfQ: nil,
 	}, nil
 }
 
@@ -662,20 +665,22 @@ func getHPairStatistics(h *bigmatrix.BigMatrix) ([]HPairStatistics, int, error) 
 // OperationOnB must be populated (non-zero length). It is an error to populate
 // both the matrices and the permutations.
 type RowOperation struct {
-	Indices        []int   // indices of rows affected by the row operation
-	OperationOnH   []int   // sub-matrix for the row operation on H and/or A
-	OperationOnB   []int   // sub-matrix for the row operation on B
-	PermutationOfH [][]int // cycles of the permutation for the row operation on H and/or A
-	PermutationOfB [][]int // cycles of the permutation for the row operation on B
+	Indices            []int     // indices of rows affected by the row operation
+	OperationOnH       []int     // sub-matrix for the row operation on H and/or A
+	OperationOnB       []int     // sub-matrix for the row operation on B
+	PermutationOfH     [][]int   // cycles of the permutation for the row operation on H and/or A
+	PermutationOfB     [][]int   // cycles of the permutation for the row operation on B
+	RightmostColumnOfQ []float64 // rightmost column of the corner removal matrix, Q
 }
 
 func NewFromSubMatrices(indices, subMatrix, subMatrixInverse []int) *RowOperation {
 	return &RowOperation{
-		Indices:        indices,
-		OperationOnH:   subMatrix,
-		OperationOnB:   subMatrixInverse,
-		PermutationOfH: [][]int{},
-		PermutationOfB: [][]int{},
+		Indices:            indices,
+		OperationOnH:       subMatrix,
+		OperationOnB:       subMatrixInverse,
+		PermutationOfH:     [][]int{},
+		PermutationOfB:     [][]int{},
+		RightmostColumnOfQ: nil,
 	}
 }
 
@@ -743,11 +748,12 @@ func NewFromPermutation(indices, permutation []int) (*RowOperation, error) {
 		)
 	}
 	return &RowOperation{
-		Indices:        indices,
-		OperationOnH:   []int{},
-		OperationOnB:   []int{},
-		PermutationOfH: permutationOfH,
-		PermutationOfB: permutationOfB,
+		Indices:            indices,
+		OperationOnH:       []int{},
+		OperationOnB:       []int{},
+		PermutationOfH:     permutationOfH,
+		PermutationOfB:     permutationOfB,
+		RightmostColumnOfQ: nil,
 	}, nil
 }
 

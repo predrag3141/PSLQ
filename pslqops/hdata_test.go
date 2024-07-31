@@ -207,11 +207,12 @@ func TestGetBestRowOperation(t *testing.T) {
 				// Row swap
 				expectedRowOpsAndScores[j] = &testRowOpsAndScore{
 					RowOp: &RowOperation{
-						Indices:        []int{j, j + 1},
-						OperationOnH:   []int{},
-						OperationOnB:   []int{},
-						PermutationOfH: [][]int{{j, j + 1}},
-						PermutationOfB: [][]int{{j, j + 1}},
+						Indices:            []int{j, j + 1},
+						OperationOnH:       []int{},
+						OperationOnB:       []int{},
+						PermutationOfH:     [][]int{{j, j + 1}},
+						PermutationOfB:     [][]int{{j, j + 1}},
+						RightmostColumnOfQ: nil,
 					},
 					ScoreNumerator:   t0 * t0,
 					ScoreDenominator: bestScoreForThisJ,
@@ -221,11 +222,12 @@ func TestGetBestRowOperation(t *testing.T) {
 				// but the two entries for OperationOnH are enough to test with.
 				expectedRowOpsAndScores[j] = &testRowOpsAndScore{
 					RowOp: &RowOperation{
-						Indices:        []int{j, j + 1},
-						OperationOnH:   []int{int(bestAForThisJ), int(bestBForThisJ)},
-						OperationOnB:   []int{},
-						PermutationOfH: [][]int{},
-						PermutationOfB: [][]int{},
+						Indices:            []int{j, j + 1},
+						OperationOnH:       []int{int(bestAForThisJ), int(bestBForThisJ)},
+						OperationOnB:       []int{},
+						PermutationOfH:     [][]int{},
+						PermutationOfB:     [][]int{},
+						RightmostColumnOfQ: nil,
 					},
 					ScoreNumerator:   t0 * t0,
 					ScoreDenominator: bestScoreForThisJ,

@@ -142,11 +142,12 @@ func (srs *SwapReduceSolveV2) switchToFullReductionMode() (*pslqops.RowOperation
 	// Returning an identity matrix (a no-op) causes srs.state.OneIteration to cycle back and do one
 	// full reduction before calling getR again.
 	return &pslqops.RowOperation{
-		Indices:        []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
-		OperationOnH:   []int{1, 0, 0, 1},
-		OperationOnB:   []int{1, 0, 0, 1},
-		PermutationOfH: [][]int{},
-		PermutationOfB: [][]int{},
+		Indices:            []int{srs.state.NumRows() - 2, srs.state.NumRows() - 1},
+		OperationOnH:       []int{1, 0, 0, 1},
+		OperationOnB:       []int{1, 0, 0, 1},
+		PermutationOfH:     [][]int{},
+		PermutationOfB:     [][]int{},
+		RightmostColumnOfQ: nil,
 	}, nil
 }
 
@@ -171,11 +172,12 @@ func (srs *SwapReduceSolveV2) getGeneralPairRowOp() (*pslqops.RowOperation, erro
 	bestPair := hPairStatistics[bestIndex]
 	indices, operationOnH := bestPair.GetIndicesAndSubMatrix()
 	return &pslqops.RowOperation{
-		Indices:        indices,
-		OperationOnH:   operationOnH,
-		OperationOnB:   operationOnH,
-		PermutationOfH: [][]int{},
-		PermutationOfB: [][]int{},
+		Indices:            indices,
+		OperationOnH:       operationOnH,
+		OperationOnB:       operationOnH,
+		PermutationOfH:     [][]int{},
+		PermutationOfB:     [][]int{},
+		RightmostColumnOfQ: nil,
 	}, nil
 }
 

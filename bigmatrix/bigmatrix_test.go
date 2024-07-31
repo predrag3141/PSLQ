@@ -152,6 +152,7 @@ func TestBigMatrix_Mul(t *testing.T) {
 }
 
 func TestBigMatrix_Int64DotProduct(t *testing.T) {
+	// TODO - Test Float64DotProduct
 	const (
 		xNumRows = 4
 		xNumCols = 3

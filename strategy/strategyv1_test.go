@@ -464,7 +464,7 @@ func testGetRImprovingDiagonal(
 		getRFunc = ImproveDiagonalAlways
 		break
 	}
-	for terminated := false; !terminated; terminated, err = state.OneIteration(getRFunc) {
+	for terminated := false; !terminated; terminated, err = state.OneIteration(getRFunc, nil) {
 		// Track details about the diagonal
 		var aboutToTerminate bool
 		aboutToTerminate, err = state.AboutToTerminate()

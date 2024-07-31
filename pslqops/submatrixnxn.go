@@ -4,6 +4,8 @@ package pslqops
 
 import (
 	"fmt"
+	"github.com/predrag3141/PSLQ/util"
+	"math"
 
 	"github.com/predrag3141/PSLQ/bigmatrix"
 	"github.com/predrag3141/PSLQ/bignumber"
@@ -95,6 +97,35 @@ func GivensRotation(h *bigmatrix.BigMatrix, j0, j1 int) error {
 	return nil
 }
 
+// GivensRotationFloat64 right-multiplies a 2-column sub-matrix of H by the matrix,
+// G(j0,j1,theta), defined in  https://en.wikipedia.org/wiki/Givens_rotation.
+// The parameters j0 and j1 map to i and j in that article. The variable
+// names c, s and r below map to c, s and r in that article.
+func GivensRotationFloat64(h []float64, numRows, numCols, j0, j1 int) error {
+	if (j0 < 0) || (j1 <= j0) || (numCols <= j1) {
+		return fmt.Errorf(
+			"GivensRotationFloat64: parameters [j0, j1] = [%d, %d] violate 0 <= j0 < j1 <= %d",
+			j0, j1, numCols-1,
+		)
+	}
+	a := h[j0*numCols+j0]
+	b := h[j0*numCols+j1]
+	oneOverR := 1.0 / math.Sqrt((a*a)+(b*b))
+	c := a * oneOverR
+	s := b * oneOverR
+	for k := j0; k < numRows; k++ {
+		hkj0 := h[k*numCols+j0]
+		hkj1 := h[k*numCols+j1]
+		hkj0c := hkj0 * c
+		hkj0s := hkj0 * s
+		hkj1c := hkj1 * c
+		hkj1s := hkj1 * s
+		h[k*numCols+j0] = hkj0c + hkj1s
+		h[k*numCols+j1] = hkj1c - hkj0s
+	}
+	return nil
+}
+
 func PerformRowOp(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 	if len(ro.PermutationOfH) != 0 {
 		return h.PermuteRows(ro.PermutationOfH)
@@ -151,6 +182,117 @@ func PerformRowOp(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 	return nil
 }
 
+func PerformRowOpFloat64(h []float64, numRows, numCols int, ro *RowOperation) error {
+	const nonZeroTolerance = 1.e-10 // tolerance for non-zero entries above the diagonal
+
+	// When H is float64, the rightmost column of corner-removal matrix Q might have
+	// been pre-computed to ensure that the absolute value of the new bottom-right entry
+	// of the sub-matrix of H that ro acts on is as large as possible. A non-nil
+	// ro.RightmostColumnOfQ indicates this situation.
+	if ro.RightmostColumnOfQ != nil {
+		// The new last column of the sub-matrix of H should contain integer multiples of
+		// some number, minNonZeroEntry, which
+		// - Exceeds, in absolute value, the current bottom-right entry of the sub-matrix of H
+		// - Will be the sole non-zero entry in the sub-matrix of H after applying the
+		//   row operation
+		start, end := ro.Indices[0], ro.Indices[len(ro.Indices)-1]
+		absCurrentBottomRightOfH := math.Abs(h[(end-1)*numCols+end-1])
+		rightmostColumnOfH := make([]float64, 1+end-start)
+		minNonZeroEntry := 0.0 // the minimum non-zero  entry of the new last column
+		foundNonZeroEntry := false
+		for i := start; i <= end; i++ {
+			entry := h[i*numCols] * ro.RightmostColumnOfQ[0]
+			for j := 1; j <= i; j++ {
+				entry += h[i*numCols+j] * ro.RightmostColumnOfQ[j]
+			}
+			absEntry := math.Abs(entry)
+			if (absCurrentBottomRightOfH < absEntry) && (absEntry < minNonZeroEntry) {
+				foundNonZeroEntry = true
+				minNonZeroEntry = absEntry
+			}
+			rightmostColumnOfH[end-i] = entry
+		}
+		if !foundNonZeroEntry {
+			// No elements of the rightmost column of the product are larger than the
+			// current bottom-right entry of the sub-matrix of H.
+			return fmt.Errorf("PerformRowOpFloat64: did not improve H[%d][%d]", end, end)
+		}
+
+		// Set the rightmost column of H
+		for i := start; i <= end; i++ {
+			h[i*numCols+numCols-1] = rightmostColumnOfH[i-start]
+		}
+	}
+
+	// Handle permutation matrices
+	if len(ro.PermutationOfH) != 0 {
+		return permuteRowsFloat64(h, numCols, ro.PermutationOfH, "PerformRowOpFloat64")
+	}
+
+	// The row operation is general (not a permutation of rows).
+	//
+	// Int64DotProduct will have its operands once rowOperation.OperationOnA is expanded to
+	// numRows columns and converted to int64 in int64SubMatrix. Each column of int64SubMatrix
+	// equals either the 0 vector, or a column of rowOperation.OperationOnA, depending on whether
+	// indices contains that column's number.
+	numIndices := len(ro.Indices)
+	int64SubMatrix := make([]int64, numIndices*numRows)
+	for i := 0; i < numIndices; i++ {
+		for j := 0; j < numIndices; j++ {
+			int64SubMatrix[i*numRows+ro.Indices[j]] = int64(ro.OperationOnH[i*numIndices+j])
+		}
+	}
+
+	// Inputs to DotProductFloat64 are available.
+	newSubMatrixOfH := make([]float64, numIndices*numCols)
+	cursor := 0
+	for i := 0; i < numIndices; i++ {
+		for j := 0; j < numCols; j++ {
+			var err error
+			newSubMatrixOfH[cursor] = util.DotProductFloat64(
+				int64SubMatrix, numRows, h, numCols, i, j, j, numRows,
+			)
+			if err != nil {
+				return fmt.Errorf(
+					"PerformRowOp: could not compute H[%d][%d]: %q",
+					ro.Indices[i], j, err.Error(),
+				)
+			}
+			cursor++
+		}
+	}
+
+	// The affected entries of H need replacing
+	cursor = 0
+	for i := 0; i < numIndices; i++ {
+		for j := 0; j < numCols; j++ {
+			h[ro.Indices[i]+j] = newSubMatrixOfH[cursor]
+			cursor++
+		}
+	}
+
+	if ro.RightmostColumnOfQ != nil {
+		// Since ro.RightmostColumnOfQ is non-nil, it was applied above. The row operation
+		// should have left all zeroes in the rightmost column of the sub-matrix of H that
+		// ro acts on.
+		start, end := ro.Indices[0], ro.Indices[len(ro.Indices)-1]
+		normSq := 0.0
+		for i := start; i < end; i++ {
+			entry := h[i*numCols+numCols-1]
+			normSq += entry * entry
+		}
+		if normSq > (nonZeroTolerance * float64(1+end-start)) {
+			return fmt.Errorf(
+				"PerformRowOpFloat64: did not zero out column %d of H above the diagonal", end,
+			)
+		}
+		for i := start; i < end; i++ {
+			h[i*numCols+numCols-1] = 0
+		}
+	}
+	return nil
+}
+
 func RemoveCorner(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 	numRows := h.NumRows()
 	err := ro.ValidateIndices(numRows, "RemoveCorner")
@@ -173,6 +315,33 @@ func RemoveCorner(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 			if err != nil {
 				return fmt.Errorf(
 					"RemoveCorner: could not perform Givens rotation on H[%d][%d]: %q",
+					i, j, err.Error(),
+				)
+			}
+		}
+	}
+	return nil
+}
+
+func RemoveCornerFloat64(h []float64, numRows, numCols int, ro *RowOperation) error {
+	err := ro.ValidateIndices(numRows, "RemoveCornerFloat64")
+	if err != nil {
+		return err
+	}
+	j0 := ro.Indices[0]
+	j1 := ro.Indices[len(ro.Indices)-1]
+	for i := j0; i <= j1; i++ {
+		for j := j1; j > i; j-- {
+			hij := h[i*numCols+j]
+			if hij == 0.0 {
+				// The rightmost column might already be zero after row operations that
+				// include a recommended rightmost column of the corner-removing matrix, Q
+				continue
+			}
+			err = GivensRotationFloat64(h, numRows, numCols, i, j)
+			if err != nil {
+				return fmt.Errorf(
+					"RemoveCornerFloat64: could not perform Givens rotation on H[%d][%d]: %q",
 					i, j, err.Error(),
 				)
 			}

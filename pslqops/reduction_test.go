@@ -21,6 +21,8 @@ const (
 )
 
 func TestReductionMode(t *testing.T) {
+	// TODO - Test getColumnThresholdsFloat64
+	// TODO - Test rowNeedsReductionFloat64
 	const numRows = 17
 	const numCols = 16
 	const reductionGentle = 1
@@ -144,6 +146,8 @@ func TestReductionMode(t *testing.T) {
 }
 
 func TestGetD_GetE(t *testing.T) {
+	// TODO - Test GetBigNumberDFloat64
+	// TODO - Test isReducedFloat64
 	const numRows = 17
 	const numCols = 16
 	const reductionGentle = 1
@@ -395,6 +399,10 @@ func TestGetD_GetE(t *testing.T) {
 }
 
 func TestReduceH(t *testing.T) {
+	// TODO - Test GetInt64DFloat64
+	// TODO - Test Int64ReduceHFloat64
+	// TODO - Test BigNumberReduceH
+	// TODO - Test BigNumberReduceHFloat64
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 10

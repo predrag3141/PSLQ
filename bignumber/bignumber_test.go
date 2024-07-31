@@ -278,6 +278,31 @@ func testInt64Mul(
 	checkResult(t, expected, receiver, tolerance)
 }
 
+func testFloat64Mul(
+	t *testing.T,
+	inputA float64,
+	inputBStr string,
+	expectedStr string,
+) {
+	tolerance := NewPowerOfTwo(-35)
+	var errMessage string
+	receiver, _, _, inputBReceiver, inputBNonReceiver, expected := setupFunction(
+		t, "0", "0", inputBStr, expectedStr,
+	)
+
+	var actual0, actual1 *BigNumber
+	var err error
+	actual0 = receiver.Float64Mul(inputA, inputBNonReceiver)
+	actual1 = inputBReceiver.Float64Mul(inputA, inputBReceiver)
+	if err != nil {
+		errMessage = err.Error()
+	}
+	assert.NoErrorf(t, err, "unexpected error from Float64Mul: %q", errMessage)
+	checkResult(t, expected, actual0, tolerance)
+	checkResult(t, expected, actual1, tolerance)
+	checkResult(t, expected, receiver, tolerance)
+}
+
 func TestBigNumber_NewFromInt(t *testing.T) {
 	input := big.NewInt(0).Add(powerOf2(256), powerOf2(33))
 	x := NewFromInt(input)
@@ -287,6 +312,7 @@ func TestBigNumber_NewFromInt(t *testing.T) {
 func TestNewFromDecimalString(t *testing.T) {
 	minusOneEighth := NewFromInt64(0).Mul(NewPowerOfTwo(-3), NewFromInt64(-1))
 	checkNewFromDecimal_NoError(t, "0", NewFromInt64(0), true)
+	checkNewFromDecimal_NoError(t, "0.0", NewFromInt64(0), false) // integers written with decimals are non-integer
 	checkNewFromDecimal_Error(t, "-0-", "NewFromDecimalString: input has extraneous dashes")
 	checkNewFromDecimal_NoError(t, "-10000003298760000", NewFromInt64(-10000003298760000), true)
 	checkNewFromDecimal_Error(t, "-0a", "NewFromDecimalString: Could not parse input as an integer")
@@ -296,7 +322,7 @@ func TestNewFromDecimalString(t *testing.T) {
 		"NewFromDecimalString: input is too large to be represented as a float",
 	)
 	checkNewFromDecimal_Error(t, "100a00000000000.001", "NewFromDecimalString: Could not parse mantissa as an integer")
-	checkNewFromDecimal_Error(t, ".", "NewFromDecimalString: Could not parse mantissa as an integer")
+	checkNewFromDecimal_Error(t, ".", "NewFromDecimalString: input must contain digits")
 
 }
 
@@ -673,6 +699,15 @@ func TestBigNumber_Int64Mul(t *testing.T) {
 
 	testInt64Mul(t, -398506, "5494", "-2189391964")
 	testInt64Mul(t, -5494, "-398506", "2189391964")
+}
+
+func TestBigNumber_Float64Mul(t *testing.T) {
+	testFloat64Mul(t, 4.12310563, "2194.3749", "9047.639504520687")
+	testFloat64Mul(t, 4, "2194.3749", "8777.4996")
+	testFloat64Mul(t, -0.234, "24894.7557", "-5825.3728338")
+	testFloat64Mul(t, 3.904, "-24894.7557", "-97189.1262528")
+	testFloat64Mul(t, 0.0, "-24894.7557", "0")
+	testFloat64Mul(t, 3.904, "0.0", "0")
 }
 
 func TestBigNumber_IsInt(t *testing.T) {

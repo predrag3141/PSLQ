@@ -90,6 +90,9 @@ func NewFromDecimalString(input string) (*BigNumber, error) {
 	if len(input) == 0 {
 		return nil, fmt.Errorf("NewFromDecimalString: input must have length > 0")
 	}
+	if input == "." {
+		return nil, fmt.Errorf("NewFromDecimalString: input must contain digits")
+	}
 	sign := 1
 	if strings.Index(input, "-") == 0 {
 		sign = -1
@@ -97,6 +100,9 @@ func NewFromDecimalString(input string) (*BigNumber, error) {
 	}
 	if strings.Count(input, "-") > 0 {
 		return nil, fmt.Errorf("NewFromDecimalString: input has extraneous dashes")
+	}
+	if strings.Count(input, ".") > 1 {
+		return nil, fmt.Errorf("NewFromDecimalString: input has extraneous decimals")
 	}
 	input = strings.TrimLeft(input, "0")
 	if len(input) == 0 {
@@ -137,21 +143,27 @@ func NewFromDecimalString(input string) (*BigNumber, error) {
 	// Example 3: input = "2334.0" with value 2334 / 1
 	//            dp == 4
 	//            mantissa <- "2334."
+	// Example 4: input = "0.0" with value 0
+	//            dp == 1
+	//            mantissa <- "0."
 	mantissa = strings.TrimRight(input, "0")
 
 	// Example 1: mantissa <- "002334"
 	// Example 2: mantissa <- "2334"
 	// Example 3: mantissa <- "2334"
+	// Example 4: mantissa <- "0"
 	mantissa = strings.Replace(mantissa, ".", "", 1)
 
 	// Example 1: exponentBase10 <- -(6 - 0) = -6; 10^6 = 1000000 as in the value 2334 / 1000000
 	// Example 2: exponentBase10 <- -(4 - 1) = -3; 10^3 = 1000 as in the value 2334 / 1000
 	// Example 3: exponentBase10 <- -(4 - 4) = -0; 10^0 = 1 as in the value 2334 / 1
+	// Example 4: exponentBase10 <- -(1 - 1) =  0; 10^0 = 1 as in the value 0 / 1
 	exponentBase10 = -(len(mantissa) - dp)
 
 	// Example 1: mantissa <- "2334"
 	// Example 2: mantissa <- "2334"
 	// Example 3: mantissa <- "2334"
+	// Example 4: mantissa <- "0"
 	mantissa = strings.TrimLeft(mantissa, "0")
 
 	// To use up the bits of precision, define
@@ -175,7 +187,7 @@ func NewFromDecimalString(input string) (*BigNumber, error) {
 	//            So multiply the mantissa, 2334, by 2^-log2scale, which is close
 	//            to precision / 10 -- e.g. precision / 8 or precision / 16 (depending
 	//            on rounding) -- before dividing by 1000. Note that 2334 / 10 ~ 1000
-	// Example 2: log2scale ~ -precision + log2(10) * (4 + (-0))
+	// Example 3: log2scale ~ -precision + log2(10) * (4 + (-0))
 	//                      = -precision + log2(10) * 4
 	//            So multiply the mantissa, 2334, by 2^-log2scale, which is close
 	//            to precision / 10000 -- e.g. precision / 8192 or precision / 16384
@@ -188,7 +200,11 @@ func NewFromDecimalString(input string) (*BigNumber, error) {
 	if retval.log2scale > 0 {
 		return nil, fmt.Errorf("NewFromDecimalString: input is too large to be represented as a float")
 	}
-	if _, ok := retval.numerator.SetString(mantissa, 10); !ok {
+	if mantissa == "" {
+		// Edge case where input was of the form "0.0", or "00.0", or similar. This is considered
+		// a floating point version of zero, in that log2scale is non-zero.
+		retval.numerator.SetInt64(0)
+	} else if _, ok := retval.numerator.SetString(mantissa, 10); !ok {
 		return nil, fmt.Errorf("NewFromDecimalString: Could not parse mantissa as an integer")
 	}
 	if sign == -1 {
@@ -549,6 +565,35 @@ func (bn *BigNumber) Int64Mul(x int64, y *BigNumber) *BigNumber {
 	bn.numerator.Mul(big.NewInt(x), &y.numerator)
 	bn.log2scale = y.log2scale
 	bn.Normalize(autoPrecision)
+	return bn
+}
+
+// Float64Mul sets bn to the product of float64 x and BigNumber y
+func (bn *BigNumber) Float64Mul(x float64, y *BigNumber) *BigNumber {
+	const targetPrecision = 128 // more than double the precision of float64
+
+	// Make bn a copy of y, with extra precision if needed
+	logMultiplier := targetPrecision + y.log2scale
+	if logMultiplier > 0 {
+		multiplier := powerOf2(logMultiplier)
+		bn.numerator.Set(big.NewInt(0).Mul(multiplier, &y.numerator))
+		bn.log2scale = y.log2scale - logMultiplier
+	} else {
+		bn.numerator.Set(&y.numerator)
+		bn.log2scale = y.log2scale
+	}
+
+	// bn is a copy of y, with a possible scaling change
+	// productAsFloat <- x * bn.numerator
+	xAsFloat := big.NewFloat(x)
+	xAsFloat.SetPrec(targetPrecision)
+	numeratorAsFloat := big.NewFloat(0).SetInt(&bn.numerator)
+	numeratorAsFloat.SetPrec(targetPrecision)
+	productAsFloat := new(big.Float).Mul(xAsFloat, numeratorAsFloat)
+
+	// productAsFloat contains the value to set bn.numerator so that bn = x * y
+	// Below, Int() sets bn.numerator to productAsFloat rounded towards zero
+	productAsFloat.Int(&bn.numerator)
 	return bn
 }
 
