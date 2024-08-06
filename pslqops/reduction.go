@@ -30,6 +30,11 @@ const (
 //
 // Entries below the diagonal of DH are bounded by the absolute value of the diagonal
 // element above them, multiplied by .5+[gentle reduction mode].
+//
+// Overflow can happen without exceeding the capacity of an int64, by rounding errors in the
+// float64 variable, dMatrixEntry. See the unit test for GetInt64D, where this happens twice.
+// In those cases, an entry in the returned D matrix is off by 1, even though that entry is
+// "only" about 2^44.
 func GetInt64D(
 	h *bigmatrix.BigMatrix,
 	reductionMode int, gentlyReduceAllRows bool,
@@ -627,6 +632,8 @@ func Int64ReduceH(h *bigmatrix.BigMatrix, dInt64Matrix []int64) error {
 			if i == 0 {
 				newEntries[cursor] = hij
 			} else {
+				// The partial entry the variable refers to below involves
+				// all but the diagonal elements of D and H.
 				partialEntry, err := bigmatrix.Int64DotProduct(
 					dInt64Matrix, numRows, h, i, j, 0, i, true,
 				)
@@ -674,6 +681,8 @@ func Int64ReduceHFloat64(h []float64, numRows, numCols int, dInt64Matrix []int64
 			if i == 0 {
 				newEntries[cursor] = h[i*numCols+j]
 			} else {
+				// The partial entry the variables refer to below involves
+				// all but the diagonal elements of D and H.
 				partialEntry := util.DotProductFloat64(
 					dInt64Matrix, numRows, h, numCols, i, j, 0, i,
 				)
@@ -713,6 +722,8 @@ func BigNumberReduceH(h *bigmatrix.BigMatrix, dBigNumberMatrix *bigmatrix.BigMat
 			if i == 0 {
 				newEntries[cursor] = hij
 			} else {
+				// The partial entry the variable refers to below involves
+				// all but the diagonal elements of D and H.
 				var partialEntry *bignumber.BigNumber
 				partialEntry, err = bigmatrix.DotProduct(
 					dBigNumberMatrix, h, i, j, 0, i, true,
@@ -755,6 +766,8 @@ func BigNumberReduceHFloat64(h []float64, numRows, numCols int, dBigNumberMatrix
 			if i == 0 {
 				newEntries[cursor] = h[i*numCols+j]
 			} else {
+				// The partial entry the variables refer to below involves
+				// all but the diagonal elements of D and H.
 				partialEntryAsBigNumber, err := bigmatrix.Float64DotProduct(
 					dBigNumberMatrix, h, i, j, 0, i, true,
 				)
@@ -1205,7 +1218,7 @@ func getColumnThresholdsFloat64(h []float64, numCols int) []float64 {
 
 	// Set thresholds
 	for j := 0; j < numCols; j++ {
-		columnThresh[j] = math.Abs(h[j*numCols+j])
+		columnThresh[j] = 0.5 * math.Abs(h[j*numCols+j])
 	}
 	return columnThresh
 }
@@ -1360,7 +1373,7 @@ func isReducedFloat64(
 ) (bool, int, int, error) {
 	tolerance := math.Pow(2.0, float64(log2tolerance))
 	for i := 0; i < numRows; i++ {
-		for j := 0; j < numCols; j++ {
+		for j := 0; j < i; j++ {
 			if math.Abs(2.0*h[i*numCols+j])-math.Abs(h[j*numCols+j]) > tolerance {
 				return false, i, j, nil
 			}

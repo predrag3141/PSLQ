@@ -731,7 +731,7 @@ func (s *State) step3(rowOperation *RowOperation) error {
 	if rowOperation.Indices[len(rowOperation.Indices)-1] <= s.numCols-1 {
 		// Since rowOperation does not just swap the last two rows, a corner needs removing
 		if s.useFloat64H {
-			err = RemoveCornerFloat64(s.hFloat64, s.NumRows(), s.NumCols(), rowOperation)
+			err = RemoveCornerFloat64(s.hFloat64, s.numCols, rowOperation)
 		} else {
 			err = RemoveCorner(s.h, rowOperation)
 		}

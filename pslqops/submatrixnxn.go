@@ -183,45 +183,13 @@ func PerformRowOp(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 }
 
 func PerformRowOpFloat64(h []float64, numRows, numCols int, ro *RowOperation) error {
-	const nonZeroTolerance = 1.e-10 // tolerance for non-zero entries above the diagonal
-
-	// When H is float64, the rightmost column of corner-removal matrix Q might have
+	// When H is float64, the rightmost column of corner-removal matrix Q should have
 	// been pre-computed to ensure that the absolute value of the new bottom-right entry
-	// of the sub-matrix of H that ro acts on is as large as possible. A non-nil
-	// ro.RightmostColumnOfQ indicates this situation.
-	if ro.RightmostColumnOfQ != nil {
-		// The new last column of the sub-matrix of H should contain integer multiples of
-		// some number, minNonZeroEntry, which
-		// - Exceeds, in absolute value, the current bottom-right entry of the sub-matrix of H
-		// - Will be the sole non-zero entry in the sub-matrix of H after applying the
-		//   row operation
-		start, end := ro.Indices[0], ro.Indices[len(ro.Indices)-1]
-		absCurrentBottomRightOfH := math.Abs(h[(end-1)*numCols+end-1])
-		rightmostColumnOfH := make([]float64, 1+end-start)
-		minNonZeroEntry := 0.0 // the minimum non-zero  entry of the new last column
-		foundNonZeroEntry := false
-		for i := start; i <= end; i++ {
-			entry := h[i*numCols] * ro.RightmostColumnOfQ[0]
-			for j := 1; j <= i; j++ {
-				entry += h[i*numCols+j] * ro.RightmostColumnOfQ[j]
-			}
-			absEntry := math.Abs(entry)
-			if (absCurrentBottomRightOfH < absEntry) && (absEntry < minNonZeroEntry) {
-				foundNonZeroEntry = true
-				minNonZeroEntry = absEntry
-			}
-			rightmostColumnOfH[end-i] = entry
-		}
-		if !foundNonZeroEntry {
-			// No elements of the rightmost column of the product are larger than the
-			// current bottom-right entry of the sub-matrix of H.
-			return fmt.Errorf("PerformRowOpFloat64: did not improve H[%d][%d]", end, end)
-		}
-
-		// Set the rightmost column of H
-		for i := start; i <= end; i++ {
-			h[i*numCols+numCols-1] = rightmostColumnOfH[i-start]
-		}
+	// of the sub-matrix of H that ro acts on is as large as possible.
+	if ro.RightmostColumnOfQ == nil {
+		return fmt.Errorf(
+			"PerformRowOpFloat64: row operation does not have a right-most column of Q",
+		)
 	}
 
 	// Handle permutation matrices
@@ -270,26 +238,6 @@ func PerformRowOpFloat64(h []float64, numRows, numCols int, ro *RowOperation) er
 			cursor++
 		}
 	}
-
-	if ro.RightmostColumnOfQ != nil {
-		// Since ro.RightmostColumnOfQ is non-nil, it was applied above. The row operation
-		// should have left all zeroes in the rightmost column of the sub-matrix of H that
-		// ro acts on.
-		start, end := ro.Indices[0], ro.Indices[len(ro.Indices)-1]
-		normSq := 0.0
-		for i := start; i < end; i++ {
-			entry := h[i*numCols+numCols-1]
-			normSq += entry * entry
-		}
-		if normSq > (nonZeroTolerance * float64(1+end-start)) {
-			return fmt.Errorf(
-				"PerformRowOpFloat64: did not zero out column %d of H above the diagonal", end,
-			)
-		}
-		for i := start; i < end; i++ {
-			h[i*numCols+numCols-1] = 0
-		}
-	}
 	return nil
 }
 
@@ -323,27 +271,139 @@ func RemoveCorner(h *bigmatrix.BigMatrix, ro *RowOperation) error {
 	return nil
 }
 
-func RemoveCornerFloat64(h []float64, numRows, numCols int, ro *RowOperation) error {
-	err := ro.ValidateIndices(numRows, "RemoveCornerFloat64")
-	if err != nil {
-		return err
+// RemoveCornerFloat64 computes and applies an orthogonal transformation that
+//
+// - has ro.RightmostColumnOfQ as its rightmost column
+//
+// - puts zeroes above the diagonal of hFloat64
+//
+// # Pre-conditions
+//
+// - ro.OperationOnH or ro.PermutationOfH has been applied to hFloat64
+//
+//   - hFloat64 * ro.RightmostColumnOfQ has zeroes in all but its last entry,
+//     when operating on rows ro.Indices[0], ..., ro.Indices[len(ro.Indices)-1]
+//     of hFloat64.
+//
+// # If zeroThreshOptional is provided, then
+//
+//   - The value of zeroThreshOptional is the threshold for identifying pivot elements
+//     in the matrix equations that produce the columns of the orthogonal transformation
+//
+//   - The result of the orthogonal transformation is checked to ensure that it
+//     puts zeroes above the diagonal, within the tolerance given by zeroThreshOptional
+func RemoveCornerFloat64(hFloat64 []float64, numCols int, ro *RowOperation, zeroThreshOptional ...float64) error {
+	zeroThresh := 0.0
+	useZeroThresh := false
+	if len(zeroThreshOptional) == 1 {
+		zeroThresh = zeroThreshOptional[0]
+		useZeroThresh = true
 	}
-	j0 := ro.Indices[0]
-	j1 := ro.Indices[len(ro.Indices)-1]
-	for i := j0; i <= j1; i++ {
-		for j := j1; j > i; j-- {
-			hij := h[i*numCols+j]
-			if hij == 0.0 {
-				// The rightmost column might already be zero after row operations that
-				// include a recommended rightmost column of the corner-removing matrix, Q
-				continue
+	dim := len(ro.RightmostColumnOfQ)
+	q := make([]float64, dim*dim)
+	numRows := numCols + 1
+
+	// The last column of q is available immediately
+	for i := 0; i < dim; i++ {
+		q[i*dim+dim-1] = ro.RightmostColumnOfQ[i]
+	}
+
+	// Create subMatrixOfH
+	ul := ro.Indices[0]
+	numRowsAffected := numRows - ul
+	toSolveForZero := make([]float64, (dim-1)*dim)
+	subMatrixOfH := make([]float64, numRowsAffected*dim)
+	for i := 0; i < numRowsAffected; i++ {
+		for j := 0; j < dim; j++ {
+			subMatrixOfH[i*dim+j] = hFloat64[(ul+i)*numCols+ul+j]
+		}
+	}
+
+	// Populate the other columns of q, starting from the right
+	for i := dim - 2; 0 <= i; i-- {
+		// Populate a matrix "toSolveForZero", containing as rows:
+		// - the first i rows of hFloat64
+		// - the transposes of the dim-(i+1) right-most columns of q
+		//
+		// Solve (toSolveForZero)(q') = 0 and |q'| = 1. By this construction, q' is orthogonal
+		// to the dim-(i+1) rightmost columns of q and to the first i rows of the sub-matrix of
+		// hFloat64 whose upper-left entry is H[ul][ul]. Successively pre-pending q' to q as
+		// column dim-(i+1) forms a matrix q such that
+		// - q is orthogonal
+		// - (hFloat64)(q) is lower-triangular
+		//
+		// For each i, q is a (dim-1) x dim matrix, which can always be solved
+		// for zero.
+		for j := 0; j < (dim - 1); j++ {
+			if j < i {
+				// Copy row j of the sub-matrix of hFloat64 to row j of toSolveForZero
+				for k := 0; k < dim; k++ {
+					toSolveForZero[j*dim+k] = subMatrixOfH[j*dim+k]
+				}
+			} else {
+				// Copy the transpose of column j+1 of q to row j of toSolveForZero
+				for k := 0; k < dim; k++ {
+					toSolveForZero[j*dim+k] = q[k*dim+j+1]
+				}
 			}
-			err = GivensRotationFloat64(h, numRows, numCols, i, j)
-			if err != nil {
-				return fmt.Errorf(
-					"RemoveCornerFloat64: could not perform Givens rotation on H[%d][%d]: %q",
-					i, j, err.Error(),
-				)
+		}
+
+		// Find a vector, nextColumnOfQ, that is orthogonal to the existing columns of Q
+		// as well as to the first i rows of the sub-matrix. In other words, solve
+		// (toSolveForZero)(nextColumnOfQ) = 0 for nextColumnOfQ.
+		var nextColumnOfQ []float64
+		if useZeroThresh {
+			nextColumnOfQ = SolveNm1xn(toSolveForZero, dim, zeroThresh)
+		} else {
+			nextColumnOfQ = SolveNm1xn(toSolveForZero, dim)
+		}
+		columnNormSq := 0.0
+		for j := 0; j < dim; j++ {
+			columnNormSq += nextColumnOfQ[j] * nextColumnOfQ[j]
+		}
+		oneOverColumnNorm := 1.0 / math.Sqrt(columnNormSq)
+		for j := 0; j < dim; j++ {
+			q[j*dim+i] = nextColumnOfQ[j] * oneOverColumnNorm
+		}
+	}
+
+	// Now q has been populated. By construction of q, (sub-matrix of H)(q) is lower-quadrangular.
+	// So multiplying on the right by q removes the corner. The rows affected by this multiplication
+	// are from ul to the bottom of H.
+	//
+	// The first i-loop below performs the multiplication on the first dim rows
+	// affected, for which there are special considerations. The second i-loop performs
+	// the multiplication on the rest of the affected rows.
+	for i := 0; i < dim; i++ {
+		for k := 0; k <= i; k++ {
+			hFloat64[(ul+i)*numCols+ul+k] = subMatrixOfH[i*dim] * q[k]
+			for j := 1; j < dim; j++ {
+				hFloat64[(ul+i)*numCols+ul+k] += subMatrixOfH[i*dim+j] * q[j*dim+k]
+			}
+		}
+		for k := i + 1; k < dim; k++ {
+			hFloat64[(ul+i)*numCols+ul+k] = 0.0
+		}
+		if useZeroThresh {
+			for k := i + 1; k < dim; k++ {
+				hIK := subMatrixOfH[i*dim] * q[k]
+				for j := 1; j < dim; j++ {
+					hIK += subMatrixOfH[i*dim+j] * q[j*dim+k]
+				}
+				if math.Abs(hIK) > zeroThresh {
+					return fmt.Errorf(
+						"RemoveCornerFloat64: error in corner removal ul = %d sub-matrix = %v, q = %v",
+						ul, subMatrixOfH, q,
+					)
+				}
+			}
+		}
+	}
+	for i := dim; i < numRowsAffected; i++ {
+		for k := 0; k < dim; k++ {
+			hFloat64[(ul+i)*numCols+ul+k] = subMatrixOfH[i*dim] * q[k]
+			for j := 1; j < dim; j++ {
+				hFloat64[(ul+i)*numCols+ul+k] += subMatrixOfH[i*dim+j] * q[j*dim+k]
 			}
 		}
 	}

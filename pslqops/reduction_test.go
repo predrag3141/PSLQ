@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	printOriginalTU = iota
+	float64Thresh     = 1.e-10
+	log2float64Thresh = -33
+	printOriginalTU   = iota
 	printExpectedR
 	printExpectedTU
 	printActualR
@@ -21,8 +23,6 @@ const (
 )
 
 func TestReductionMode(t *testing.T) {
-	// TODO - Test getColumnThresholdsFloat64
-	// TODO - Test rowNeedsReductionFloat64
 	const numRows = 17
 	const numCols = 16
 	const reductionGentle = 1
@@ -50,12 +50,32 @@ func TestReductionMode(t *testing.T) {
 				hEntries := make([]int64, numRows*numCols)
 				getHForDRelatedTests(hEntries, numRows, numCols, reductionMode, maxDiagonalEntry, maxEntryInH, testNbr)
 				h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
+				hFloat64 := make([]float64, numRows*numCols)
+				for i := 0; i < numRows*numCols; i++ {
+					hFloat64[i] = float64(hEntries[i])
+				}
 				assert.NoError(t, err)
 
-				// Create column thresholds
+				// Create column thresholds from both big number and float64 versions
+				// of H, and ensure that they match.
 				columnThreshGentle, columnThreshFull, err := getColumnThresholds(
 					h, halfPlusReductionMode, "TestReductionMode",
 				)
+				columnThreshFloat64 := getColumnThresholdsFloat64(hFloat64, numCols)
+				one := bignumber.NewFromInt64(1)
+				maxColumnThreshDiff := bignumber.NewFromInt64(0).Float64Mul(
+					float64Thresh, one,
+				)
+				for j := 0; j < numCols; j++ {
+					actualColumnThresh := bignumber.NewFromInt64(0).Float64Mul(
+						columnThreshFloat64[j], one,
+					)
+					columThreshDiff := bignumber.NewFromInt64(0).Sub(
+						columnThreshFull[j], actualColumnThresh,
+					)
+					absActualColumThreshDiff := bignumber.NewFromInt64(0).Abs(columThreshDiff)
+					assert.Equal(t, -1, absActualColumThreshDiff.Cmp(maxColumnThreshDiff))
+				}
 				assert.NoError(t, err)
 
 				// Test column thresholds
@@ -91,7 +111,7 @@ func TestReductionMode(t *testing.T) {
 					)
 				}
 
-				// Test rowNeedsReduction
+				// Test rowNeedsReduction and rowNeedsReductionFloat64
 				diagonal := make([]int64, numCols)
 				for j := 0; j < numCols; j++ {
 					diagonal[j] = hEntries[j*numCols+j]
@@ -99,6 +119,7 @@ func TestReductionMode(t *testing.T) {
 				for i := 0; i < numRows; i++ {
 					expectedColumn := -1
 					expectedRowNeedsReduction := false
+					testFloat64 := true
 					for j := 0; j < i; j++ {
 						absEntry := hEntries[j*numCols+j]
 						if absEntry < 0 {
@@ -109,8 +130,10 @@ func TestReductionMode(t *testing.T) {
 						thresh := fullThresh
 						if i == numRows-1 {
 							thresh = gentleThresh
+							testFloat64 = false
 						} else if gentlyReduceAllRows && (j < i-1) {
 							thresh = gentleThresh
+							testFloat64 = false
 						}
 						if (hEntries[i*numCols+j] > thresh) || (-hEntries[i*numCols+j] > thresh) {
 							expectedRowNeedsReduction = true
@@ -118,10 +141,13 @@ func TestReductionMode(t *testing.T) {
 							break
 						}
 					}
-					var actualRowNeedsReduction bool
-					var actualColumn int
+					var actualRowNeedsReduction, actualRowNeedsReductionFloat64 bool
+					var actualColumn, actualColumnFloat64 int
 					actualRowNeedsReduction, actualColumn, err = rowNeedsReduction(
 						h, columnThreshGentle, columnThreshFull, gentlyReduceAllRows, i, 0, "TestReductionMode",
+					)
+					actualRowNeedsReductionFloat64, actualColumnFloat64, err = rowNeedsReductionFloat64(
+						hFloat64, numCols, columnThreshFloat64, i,
 					)
 					assert.Equalf(
 						t, expectedRowNeedsReduction, actualRowNeedsReduction,
@@ -137,6 +163,18 @@ func TestReductionMode(t *testing.T) {
 						numRows, reductionMode, gentlyReduceAllRows,
 						diagonal, i, hEntries[i*numCols:(i+1)*numCols],
 					)
+					if testFloat64 {
+						assert.Equalf(
+							t, expectedRowNeedsReduction, actualRowNeedsReductionFloat64,
+							"NumRows: %d Diagonal: %v Row %d: %v",
+							numRows, diagonal, i, hEntries[i*numCols:(i+1)*numCols],
+						)
+						assert.Equalf(
+							t, expectedColumn, actualColumnFloat64,
+							"NumRows: %d Diagonal: %v Row %d: %v",
+							numRows, diagonal, i, hEntries[i*numCols:(i+1)*numCols],
+						)
+					}
 				}
 			}
 		}
@@ -145,9 +183,103 @@ func TestReductionMode(t *testing.T) {
 	}
 }
 
+func TestIsReducedFloat64(t *testing.T) {
+	const numRows = 6 // 17
+	const numCols = 5 // 16
+	const maxDiagonalEntry = 5
+	const numSeedsPerTest = 1000
+	const numTests = 27
+	const minSeed = 193957
+
+	seed := int64(minSeed)
+	for testNbr := 0; testNbr < numTests; testNbr++ {
+		rand.Seed(seed)
+		seed += numSeedsPerTest
+		for _, alreadyReduced := range []bool{false, true} {
+			// Create hEntries, h and hFloat64
+			hEntries := make([]int64, numRows*numCols)
+			expectedReducedFlag := true
+			for i := 0; i < numRows; i++ {
+				for j := 0; (j <= i) && (j < numCols); j++ {
+					// Both diagonal and interior elements have random algebraic signs
+					sgn := int64(2*rand.Intn(2) - 1)
+
+					// Diagonal elements are free to vary independently of other entries in H.
+					// They must not be zero.
+					if i == j {
+						hEntries[i*numCols+j] = sgn * int64(rand.Intn(maxDiagonalEntry))
+						if hEntries[i*numCols+j] == 0 {
+							hEntries[i*numCols+j] = sgn
+						}
+						continue
+					}
+
+					// i < j
+					absDiagonalElement := int(hEntries[j*numCols+j])
+					if absDiagonalElement < 0 {
+						absDiagonalElement = -absDiagonalElement
+					}
+					if alreadyReduced {
+						reducedThresh := absDiagonalElement / 2
+						if reducedThresh > 2 {
+							hEntries[i*numCols+j] = sgn * int64(rand.Intn(reducedThresh))
+						} else {
+							hEntries[i*numCols+j] = 0
+						}
+					} else {
+						if (i+j)%(testNbr+10) == 0 {
+							hEntries[i*numCols+j] = hEntries[j*numCols+j] / 2
+							if hEntries[i*numCols+j] < 0 {
+								hEntries[i*numCols+j] -= 1
+							} else {
+								hEntries[i*numCols+j] += 1
+							}
+							expectedReducedFlag = false
+						}
+					}
+				}
+			}
+
+			// Create big number and float64 H
+			h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
+			assert.NoError(t, err)
+			hFloat64 := make([]float64, numRows*numCols)
+			for i := 0; i < numRows*numCols; i++ {
+				hFloat64[i] = float64(hEntries[i])
+			}
+			var actualReducedFlag, actualReducedFlagFloat64 bool
+			var actualRow, actualCol, actualRowFloat64, actualColFloat64 int
+			actualReducedFlag, actualRow, actualCol, err = isReduced(
+				h, ReductionFull, false, log2float64Thresh, "TestIsReducedFloat64",
+			)
+			actualReducedFlagFloat64, actualRowFloat64, actualColFloat64, err = isReducedFloat64(
+				hFloat64, numRows, numCols, log2float64Thresh, "TestIsReducedFloat64",
+			)
+			assert.Equalf(
+				t, expectedReducedFlag, actualReducedFlag,
+				"expectedIsReducedFlag: %v actualReducedFlag: %v h: %v",
+				expectedReducedFlag, actualReducedFlag, h,
+			)
+			assert.Equalf(
+				t, expectedReducedFlag, actualReducedFlagFloat64,
+				"expectedIsReducedFlag: %v actualReducedFlagFloat64: %v hFloat64: %v",
+				expectedReducedFlag, actualReducedFlagFloat64, hFloat64,
+			)
+			assert.Equalf(
+				t, actualRow, actualRowFloat64,
+				"actualRow: %d actualRowFloat64: %d h: %v",
+				actualRow, actualRowFloat64, h,
+			)
+			assert.Equalf(
+				t, actualCol, actualColFloat64,
+				"actualRow: %d actualRowFloat64: %d h: %v",
+				actualRow, actualRowFloat64, hFloat64,
+			)
+		}
+	}
+}
+
 func TestGetD_GetE(t *testing.T) {
-	// TODO - Test GetBigNumberDFloat64
-	// TODO - Test isReducedFloat64
 	const numRows = 17
 	const numCols = 16
 	const reductionGentle = 1
@@ -163,12 +295,15 @@ func TestGetD_GetE(t *testing.T) {
 	maxBigNumberDMatrixEntry := make(map[int]*bignumber.BigNumber)
 	identityMatrixDs := make(map[int]int)
 	nonIdentityMatrixDs := make(map[int]int)
+	numberOfInt64DOverflows := 0
 	for testNbr := 0; testNbr < numTests; testNbr++ {
 		for _, reductionMode := range []int{
 			ReductionFull, reductionGentle, reductionVeryGentle,
 		} {
 			for _, gentlyReduceAllRows := range []bool{false, true} {
 				// Type for tracking information about Int64 and BigNumber D
+				var calculatedAllZeroRow, startedOffReduced, dhIsReduced bool
+				var row, column int
 				type DInfo struct {
 					isIdentity bool
 					maxEntry   *bignumber.BigNumber // max entries differ slightly between int64 and bigNumber
@@ -177,12 +312,15 @@ func TestGetD_GetE(t *testing.T) {
 					dh         *bigmatrix.BigMatrix
 				}
 
-				// Create hEntries
-				// Create H
+				// Create hEntries, h and hFloat64
 				hEntries := make([]int64, numRows*numCols)
 				getHForDRelatedTests(hEntries, numRows, numCols, reductionMode, maxDiagonalEntry, maxEntryInH, testNbr)
 				h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
 				assert.NoError(t, err)
+				hFloat64 := make([]float64, numRows*numCols)
+				for i := 0; i < numRows*numCols; i++ {
+					hFloat64[i] = float64(hEntries[i])
+				}
 
 				// Call GetInt64D
 				int64DInfo := DInfo{
@@ -192,16 +330,12 @@ func TestGetD_GetE(t *testing.T) {
 					bigNumberD: nil,
 					dh:         bigmatrix.NewEmpty(numRows, numCols),
 				}
-				var calculatedAllZeroRow bool
 				int64DInfo.maxEntry, int64DInfo.isIdentity, calculatedAllZeroRow, err = GetInt64D(
 					h, reductionMode, gentlyReduceAllRows, int64DInfo.int64D,
 				)
 				assert.NoError(t, err)
 				assert.False(t, calculatedAllZeroRow)
-				int64DInfo.bigNumberD, err = bigmatrix.NewFromInt64Array(int64DInfo.int64D, numRows, numRows)
 				assert.NoError(t, err)
-				var startedOffReduced bool
-				var row, column int
 				startedOffReduced, row, column, err = isReduced(
 					h, reductionMode, gentlyReduceAllRows, 0, "TestGetD_GetE",
 				)
@@ -210,7 +344,6 @@ func TestGetD_GetE(t *testing.T) {
 					identityMatrixDs[reductionMode]++
 					assert.Truef(t, int64DInfo.isIdentity, "reduction mode: %d\nh:\n%v\n", reductionMode, h)
 				} else {
-					// H[row][column] needs reducing
 					nonIdentityMatrixDs[reductionMode]++
 					assert.Falsef(
 						t, int64DInfo.isIdentity,
@@ -222,13 +355,58 @@ func TestGetD_GetE(t *testing.T) {
 				if (!ok) || max.Cmp(int64DInfo.maxEntry) < 0 {
 					maxInt64DMatrixEntry[reductionMode] = bignumber.NewFromBigNumber(int64DInfo.maxEntry)
 				}
+
+				// Left-multiplying H by D should reduce it. As a short-cut, copy int64DInfo.int64D
+				// to int64DInfo.bigNumberD.
+				int64DInfo.bigNumberD, err = bigmatrix.NewFromInt64Array(
+					int64DInfo.int64D, numRows, numRows,
+				)
 				_, err = int64DInfo.dh.Mul(int64DInfo.bigNumberD, h)
 				assert.NoError(t, err)
+				dhIsReduced, row, column, err = isReduced(
+					int64DInfo.dh, reductionMode, gentlyReduceAllRows, 0, "TestGetD_GetE",
+				) // log2tolerance of 0 is interpreted as tolerance == 0
+				assert.NoError(t, err)
+				if !dhIsReduced {
+					numberOfInt64DOverflows++
+				}
+
+				// Call GetInt64DFloat64
+				if reductionMode == ReductionFull {
+					// For float64, the only valid reduction mode is full reduction.
+					int64DFloat64Info := DInfo{
+						isIdentity: true,
+						maxEntry:   nil,
+						int64D:     make([]int64, numRows*numRows),
+						bigNumberD: nil,
+						dh:         nil, // int64D must match int64DInfo; dh is not computed or tested
+					}
+					int64DFloat64Info.maxEntry, int64DFloat64Info.isIdentity, calculatedAllZeroRow, err = GetInt64DFloat64(
+						hFloat64, numRows, numCols, int64DFloat64Info.int64D,
+					)
+					assert.NoError(t, err)
+					startedOffReduced, row, column, err = isReducedFloat64(
+						hFloat64, numRows, numCols, log2float64Thresh, "TestGetD_GetE",
+					)
+					assert.NoError(t, err)
+					assert.Equal(t, startedOffReduced, int64DFloat64Info.isIdentity)
+					for i := 0; i < numRows; i++ {
+						for j := 0; j < numRows; j++ {
+							assert.Equalf(
+								t, int64DInfo.int64D[i*numRows+j], int64DFloat64Info.int64D[i*numRows+j],
+								"int64DInfo.int64D[%d][%d] = %d; int64DFloat64Info.int64D[%d][%d] = %d\n",
+								i, j, int64DInfo.int64D[i*numRows+j],
+								i, j, int64DFloat64Info.int64D[i*numRows+j],
+							)
+						}
+					}
+				}
 
 				// Call GetBigNumberD
 				bigNumberDInfo := DInfo{
 					isIdentity: true,
 					maxEntry:   nil,
+					int64D:     nil,
 					bigNumberD: bigmatrix.NewEmpty(numRows, numRows),
 					dh:         bigmatrix.NewEmpty(numRows, numCols),
 				}
@@ -246,7 +424,7 @@ func TestGetD_GetE(t *testing.T) {
 				} else {
 					nonIdentityMatrixDs[reductionMode]++
 					assert.Falsef(
-						t, int64DInfo.isIdentity,
+						t, bigNumberDInfo.isIdentity,
 						"reduction mode: %d gentlyReduceAllRows: %v row: %d column: %d\nh:\n%v\n",
 						reductionMode, gentlyReduceAllRows, row, column, h,
 					)
@@ -255,12 +433,50 @@ func TestGetD_GetE(t *testing.T) {
 				if (!ok) || max.Cmp(bigNumberDInfo.maxEntry) < 0 {
 					maxBigNumberDMatrixEntry[reductionMode] = bignumber.NewFromBigNumber(bigNumberDInfo.maxEntry)
 				}
+
+				// Left-multiplying H by D should reduce it.
 				_, err = bigNumberDInfo.dh.Mul(bigNumberDInfo.bigNumberD, h)
 				assert.NoError(t, err)
+				dhIsReduced, row, column, err = isReduced(
+					bigNumberDInfo.dh, reductionMode, gentlyReduceAllRows, 0, "TestGetD_GetE",
+				) // log2tolerance of 0 is interpreted as tolerance == 0
+				assert.NoError(t, err)
+				assert.Truef(
+					t, dhIsReduced, "row: %d column: %d\nD:\n%v\nH:\n%v\nDH:\n%v",
+					row, column, bigNumberDInfo.bigNumberD, h, bigNumberDInfo.dh,
+				)
 
-				// The bigNumber and int64 matrices, and their maximum entries, should be equal
-				tolerance := bignumber.NewPowerOfTwo(-50)
+				// Call GetBigNumberDFloat64
+				if reductionMode == ReductionFull {
+					bigNumberDFloat64Info := DInfo{
+						isIdentity: true,
+						maxEntry:   nil,
+						int64D:     nil,
+						bigNumberD: bigmatrix.NewEmpty(numRows, numRows),
+						dh:         nil, // bigNumberD must match bigNumberDInfo; dh is not computed or tested
+					}
+					// For float64, the only valid reduction mode is full reduction.
+					bigNumberDFloat64Info.maxEntry, bigNumberDFloat64Info.isIdentity, calculatedAllZeroRow, err = GetBigNumberDFloat64(
+						hFloat64, numRows, numCols, bigNumberDFloat64Info.bigNumberD,
+					)
+					assert.NoError(t, err)
+					startedOffReduced, row, column, err = isReducedFloat64(
+						hFloat64, numRows, numCols, log2float64Thresh, "TestGetD_GetE",
+					)
+					assert.NoError(t, err)
+					assert.Equal(t, startedOffReduced, bigNumberDFloat64Info.isIdentity)
+					var equals bool
+					tolerance := bignumber.NewPowerOfTwo(-50)
+					equals, err = bigNumberDInfo.bigNumberD.Equals(bigNumberDFloat64Info.bigNumberD, tolerance)
+					assert.NoError(t, err)
+					assert.Truef(t, equals, "hEntries:\n%v\nbig number D:\n%v\nbig number float64 D:\n%v\n",
+						hEntries, bigNumberDInfo.bigNumberD, bigNumberDFloat64Info.bigNumberD)
+				}
+
+				// The bigNumber and int64 matrices, and their maximum entries, should be equal,
+				// except in the edge case handled in the "if !equals" block
 				var equals bool
+				tolerance := bignumber.NewPowerOfTwo(-50)
 				equals, err = bigNumberDInfo.bigNumberD.Equals(int64DInfo.bigNumberD, tolerance)
 				assert.NoError(t, err)
 				if !equals {
@@ -317,15 +533,6 @@ func TestGetD_GetE(t *testing.T) {
 						}
 					}
 				}
-
-				// Right-multiplying H by D should reduce it.
-				_, err = int64DInfo.dh.Mul(bigNumberDInfo.bigNumberD, h)
-				var dhIsReduced bool
-				dhIsReduced, row, column, err = isReduced(
-					int64DInfo.dh, reductionMode, gentlyReduceAllRows, 0, "TestGetD_GetE",
-				)
-				assert.NoError(t, err)
-				assert.Truef(t, dhIsReduced, "row: %d column: %d\nDH:\n%v", row, column, int64DInfo.dh)
 
 				// Test GetInt64E
 				int64EMatrix, _, err := GetInt64E(int64DInfo.int64D, numRows)
@@ -396,19 +603,20 @@ func TestGetD_GetE(t *testing.T) {
 		identityMatrixDs[reductionVeryGentle],
 		100.0*float64(identityMatrixDs[reductionVeryGentle])/float64(identityMatrixDs[reductionVeryGentle]+nonIdentityMatrixDs[reductionVeryGentle]),
 	)
+
+	// Report the number of times GetInt64D returned a matrix with an overflow problem
+	// that resulted in a slightly incorrect reduction of H.
+	fmt.Printf("Number of apparent overflows in GetInt64D: %d\n", numberOfInt64DOverflows)
 }
 
 func TestReduceH(t *testing.T) {
-	// TODO - Test GetInt64DFloat64
-	// TODO - Test Int64ReduceHFloat64
-	// TODO - Test BigNumberReduceH
-	// TODO - Test BigNumberReduceHFloat64
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 10
 	var calculatedAllZeroRow bool
 
 	for seed := 1234; seed < 1245; seed++ {
+		// Create h and hFloat64
 		rand.Seed(int64(seed))
 		hEntries := make([]int64, numRows*numCols)
 		for i := 0; i < numRows; i++ {
@@ -422,25 +630,103 @@ func TestReduceH(t *testing.T) {
 		}
 		h, err := bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
 		assert.NoError(t, err)
-		d := make([]int64, numRows*numRows)
-		_, _, calculatedAllZeroRow, err = GetInt64D(h, ReductionFull, true, d)
+		hFloat64 := make([]float64, numRows*numCols)
+		for i := 0; i < numRows*numCols; i++ {
+			hFloat64[i] = float64(hEntries[i])
+		}
+
+		// Declarations
+		var bigNumberD, int64DBigNumberH, bigNumberDBigNumberH, expectedBigNumberDH *bigmatrix.BigMatrix
+		var int64DFloat64H, bigNumberDFloat64H, expectedFloat64DH []float64
+
+		// Create int64D and bigNumberD
+		int64D := make([]int64, numRows*numRows)
+		_, _, calculatedAllZeroRow, err = GetInt64D(h, ReductionFull, false, int64D)
 		assert.NoError(t, err)
 		assert.False(t, calculatedAllZeroRow)
-		dh, err := util.MultiplyIntInt(d, hEntries, numRows)
+		bigNumberD, err = bigmatrix.NewFromInt64Array(int64D, numRows, numRows)
 		assert.NoError(t, err)
-		err = Int64ReduceH(h, d)
+
+		// Create expectedBigNumberDH and expectedFloat64DH
+		var int64DH []int64
+		int64DH, err = util.MultiplyIntInt(int64D, hEntries, numRows)
+		expectedBigNumberDH, err = bigmatrix.NewFromInt64Array(int64DH, numRows, numCols)
+		expectedFloat64DH = make([]float64, numRows*numRows)
+		for i := 0; i < numRows*numCols; i++ {
+			expectedFloat64DH[i] = float64(int64DH[i])
+		}
+
+		// Set actual int64DBigNumberH initially to H, so it can be reduced
+		int64DBigNumberH, err = bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
 		assert.NoError(t, err)
+		err = Int64ReduceH(int64DBigNumberH, int64D)
+		assert.NoError(t, err)
+
+		// Set actual int64DFloat64H
+		int64DFloat64H = make([]float64, numRows*numCols)
+		for i := 0; i < numRows*numCols; i++ {
+			int64DFloat64H[i] = float64(hEntries[i])
+		}
+		err = Int64ReduceHFloat64(int64DFloat64H, numRows, numCols, int64D)
+		assert.NoError(t, err)
+
+		// Set actual bigNumberDBigNumberH
+		bigNumberDBigNumberH, err = bigmatrix.NewFromInt64Array(hEntries, numRows, numCols)
+		assert.NoError(t, err)
+		err = BigNumberReduceH(bigNumberDBigNumberH, bigNumberD)
+		assert.NoError(t, err)
+
+		// Set actual bigNumberDFloat64H
+		bigNumberDFloat64H = make([]float64, numRows*numCols)
+		for i := 0; i < numRows*numCols; i++ {
+			bigNumberDFloat64H[i] = float64(hEntries[i])
+		}
+		err = BigNumberReduceHFloat64(bigNumberDFloat64H, numRows, numCols, bigNumberD)
+		assert.NoError(t, err)
+
+		// Compare expected and actual DH
+		tolerance := bignumber.NewPowerOfTwo(-50)
 		for i := 0; i < numRows; i++ {
 			for j := 0; j < numCols; j++ {
-				expected := bignumber.NewFromInt64(dh[i*numCols+j])
-				actual, err := h.Get(i, j)
-				expectedStr, _ := expected.String()
-				actualStr, _ := actual.String()
+				// Initializations
+				var expectedBigNumberDHij, actualBigNumberDHij *bignumber.BigNumber
+				var actualDHijAsStr string
+				expectedBigNumberDHij, err = expectedBigNumberDH.Get(i, j)
 				assert.NoError(t, err)
-				equals := expected.Equals(actual, bignumber.NewFromInt64(0))
+				expectedFloat64DHij := expectedFloat64DH[i*numCols+j]
+				_, expectedDHijAsStr := expectedBigNumberDHij.String()
+
+				// Check int64DBigNumberH
+				actualBigNumberDHij, err = int64DBigNumberH.Get(i, j)
+				assert.NoError(t, err)
+				_, actualDHijAsStr = actualBigNumberDHij.String()
 				assert.Truef(
-					t, equals, "in row %d column %d, expected = %q != %q = actual",
-					i, j, expectedStr, actualStr,
+					t, expectedBigNumberDHij.Equals(actualBigNumberDHij, tolerance),
+					"int64DBigNumberH - expected DH[%d][%d] = %q actual DH[%d][%d] = %q",
+					i, j, expectedDHijAsStr, i, j, actualDHijAsStr,
+				)
+
+				// Check int64DFloat64H
+				assert.Equalf(t, expectedFloat64DHij, int64DFloat64H[i*numCols+j],
+					"int64DFloat64H - expected DH[%d][%d] = %f actual DH[%d][%d] = %f",
+					i, j, expectedFloat64DHij, i, j, int64DFloat64H[i*numCols+j],
+				)
+
+				// Check bigNumberDBigNumberH
+				actualBigNumberDHij, err = bigNumberDBigNumberH.Get(i, j)
+				assert.NoError(t, err)
+				_, actualDHijAsStr = actualBigNumberDHij.String()
+				assert.Truef(
+					t, expectedBigNumberDHij.Equals(actualBigNumberDHij, tolerance),
+					"bigNumberDBigNumberH - expected DH[%d][%d] = %q actual DH[%d][%d] = %q",
+					i, j, expectedDHijAsStr, i, j, actualDHijAsStr,
+				)
+
+				// Check bigNumberDFloat64H
+				assert.Equalf(
+					t, expectedFloat64DHij, bigNumberDFloat64H[i*numCols+j],
+					"int64DBigNumberH - expected DH[%d][%d] = %f actual DH[%d][%d] = %f",
+					i, j, expectedFloat64DHij, i, j, bigNumberDFloat64H[i*numCols+j],
 				)
 			}
 		}
@@ -1476,7 +1762,7 @@ func getHForDRelatedTests(
 				continue
 			}
 
-			// For maximum test coverage, elements below the diagonal follow rulse that
+			// For maximum test coverage, elements below the diagonal follow rules that
 			// depend on the test number.
 			absDiagonalElement := int(hEntries[j*numCols+j])
 			if absDiagonalElement < 0 {

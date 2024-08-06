@@ -4,13 +4,13 @@ package pslqops
 
 import (
 	"fmt"
-	"math/rand"
-	"testing"
-
 	"github.com/predrag3141/PSLQ/bigmatrix"
 	"github.com/predrag3141/PSLQ/bignumber"
 	"github.com/predrag3141/PSLQ/util"
 	"github.com/stretchr/testify/assert"
+	"math"
+	"math/rand"
+	"testing"
 )
 
 const (
@@ -20,7 +20,6 @@ const (
 )
 
 func TestGivensRotation(t *testing.T) {
-	// TODO - Test GivensRotationFloat64
 	// The first three rows and columns of h are the same as in an example
 	// from https://en.wikipedia.org/wiki/Givens_rotation as of July 30, 2023. The
 	// result of the two Givens transformations should match the equivalent result
@@ -142,7 +141,6 @@ func TestPerformRowOp(t *testing.T) {
 }
 
 func TestRemoveCorner(t *testing.T) {
-	// TODO - Test RemoveCornerFloat64
 	const numRows = 7
 	const numCols = 6
 	const maxEntry = 100
@@ -154,11 +152,15 @@ func TestRemoveCorner(t *testing.T) {
 	for testNbr := 0; testNbr < numTests; testNbr++ {
 		rand.Seed(int64(minSeed + testNbr*seedIncrement))
 		for _, rowOpType := range []string{rowPermutation, generalRowOp} {
+			// Create a random vector, xEntries, ending in a 1
 			xEntries := make([]int64, numRows)
 			for i := 0; i < numRows-1; i++ {
 				xEntries[i] = int64(rand.Intn(maxEntry) - (maxEntry / 2))
 			}
 			xEntries[numRows-1] = 1
+
+			// Create a basis, hEntries, for {z: <x,z> = 0 }, though
+			// there is a small chance that the rows will be dependent
 			hEntries := make([]int64, numRows*numCols)
 			for j := 0; j < numCols; j++ {
 				xhi := int64(0)
@@ -169,7 +171,7 @@ func TestRemoveCorner(t *testing.T) {
 				hEntries[(numRows-1)*numCols+j] = -xhi
 			}
 
-			// The columns of hEntries should be a basis for {z : <x,z> = 0}
+			// Check that the columns of hEntries are orthogonal to xEntries
 			var h *bigmatrix.BigMatrix
 			zero := bigmatrix.NewEmpty(1, numCols)
 			x, err := bigmatrix.NewFromInt64Array(xEntries, 1, numRows)
@@ -286,6 +288,181 @@ func TestRemoveCorner(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRemoveCornerFloat64(t *testing.T) {
+	const (
+		numRows  = 17
+		numCols  = 16
+		minDim   = 2
+		numTests = 100
+		minSeed  = 300396
+		seedIncr = 9544
+	)
+	numberOfTestsSkipped := 0 // number of tests skipped due to singular randomly generated sub-matrices
+	dimensionsTested := make([]int, numCols+1)
+	upperLeftTested := make([]int, numCols+1)
+	lowerRightTested := make([]int, numCols+1)
+	for testNbr := 0; testNbr < numTests; testNbr++ {
+		// Set parameters for the test
+		rand.Seed(int64(minSeed + (testNbr * seedIncr)))
+		dim := minDim + rand.Intn(1+numCols-minDim)
+		dimensionsTested[dim]++
+		ul := 0 // upper left row and column of the sub-matrix
+		if dim < numCols {
+			ul = rand.Intn(1 + numCols - dim)
+		}
+		upperLeftTested[ul]++
+		lowerRightTested[ul+dim-1]++
+
+		// The goal is to create hFloat64, with the following properties
+		// - hFloat64 is lower-triangular except for the dim-by-dim sub-matrix with upper left
+		//   corner hFloat64[ul][ul]
+		// - There is a known vector q of length 1 that is orthogonal to the first dim-1 rows
+		//   of the sub-matrix with upper left corner hFloat64[ul][ul]
+		//
+		// First, generate q, with non-zero entries in order to avoid divide-by-zero
+		// in various places
+		q := make([]float64, dim)
+		qNormSq := 0.0
+		for j := 0; j < dim; j++ {
+			q[j] = 0.02 * float64(rand.Intn(100)-50)
+			if math.Abs(q[j]) < 0.02 {
+				q[j] = 0.02
+			}
+			qNormSq += q[j] * q[j]
+		}
+		qNorm := math.Sqrt(qNormSq)
+		for j := 0; j < dim; j++ {
+			q[j] /= qNorm
+		}
+
+		// Randomly generate the sub-matrix of hFloat64 with the first dim-1 rows
+		// orthogonal to q.
+		subMatrix := make([]float64, dim*dim)
+		for i := 0; i < (dim - 1); i++ {
+			rowDotQ := 0.0
+			for j := 0; j < dim-1; j++ {
+				subMatrix[i*dim+j] = 0.02 * float64(rand.Intn(100)-50)
+				rowDotQ += subMatrix[i*dim+j] * q[j]
+			}
+			subMatrix[i*dim+dim-1] = -rowDotQ / q[dim-1]
+		}
+		for j := 0; j < dim-1; j++ {
+			subMatrix[(dim-1)*dim+j] = 0.02 * float64(rand.Intn(100)-50)
+		}
+
+		// Verify that the first dim-1 rows of the sub-matrix are orthogonal to q
+		for i := 0; i < dim-1; i++ {
+			rowDotQ := subMatrix[i*dim] * q[0]
+			for j := 1; j < dim; j++ {
+				rowDotQ += subMatrix[i*dim+j] * q[j]
+			}
+			assert.Greater(t, 1.e-10, math.Abs(rowDotQ))
+		}
+
+		// Creeate hFloat64
+		hFloat64 := make([]float64, numRows*numCols)
+		for i := 0; i < numRows; i++ {
+			for j := 0; j < numCols; j++ {
+				if (ul <= i) && (i < ul+dim) && (ul <= j) && (j < ul+dim) {
+					hFloat64[i*numCols+j] = subMatrix[(i-ul)*dim+j-ul]
+				} else if j <= i {
+					hFloat64[i*numCols+j] = 0.02 * float64(rand.Intn(100)-50)
+					if math.Abs(hFloat64[i*numCols+j]) < 0.01 {
+						hFloat64[i*numCols+j] = 0.02
+					}
+				}
+			}
+		}
+
+		// Save off the lengths of the rows (squared) of the subMatrix for later comparison.
+		// Multiplying subMatrix, embedded into hFloat64, by an orthogonal matrix to remove the
+		// corner, should not change row lengths.
+		expectedNormsSq := make([]float64, numRows)
+		for i := 0; i < numRows; i++ {
+			expectedNormsSq[i] = hFloat64[i*numCols+ul] * hFloat64[i*numCols+ul]
+			for j := 1; j < dim; j++ {
+				expectedNormsSq[i] += hFloat64[i*numCols+ul+j] * hFloat64[i*numCols+ul+j]
+			}
+		}
+
+		// Calculate the expected determinant of the sub-matrix.  The determinant should not
+		// be changed by multiplying by an orthogonal matrix. To do this calculation, append an
+		// all-zero column to subMatrix, so it can be reduced by rowReduceNMxN.
+		expectedLogDeterminant := 0.0
+		subMatrixWithZeroColumn := make([]float64, (dim+1)*dim)
+		for i := 0; i < dim; i++ {
+			for j := 0; j < dim; j++ {
+				subMatrixWithZeroColumn[i*(dim+1)+j] = subMatrix[i*dim+j]
+			}
+		}
+		pivotPositions := rowReduceNm1xN(subMatrixWithZeroColumn, dim+1)
+		if (len(pivotPositions) < dim) || (pivotPositions[dim-1].row != pivotPositions[dim-1].column) {
+			// The randomly generated sub-matrix appears to be singular
+			numberOfTestsSkipped++
+			continue
+		}
+		for i := 0; i < dim; i++ {
+			expectedLogDeterminant += math.Log(math.Abs(subMatrixWithZeroColumn[i*(dim+1)+i]))
+		}
+
+		// Call RemoveCornerFloat64 using rowOperation with Indices and RightmostColumnOfQ set.
+		// RemoveCornerFloat64 does not use the other fields. In Indices, only the first and
+		// last elements are read, so the definition below is equivalent to a full list starting
+		// at ul and ending at ul+dim-1
+		rowOperation := &RowOperation{
+			Indices:            []int{ul, ul + dim - 1},
+			PermutationOfH:     [][]int{},
+			PermutationOfB:     [][]int{},
+			OperationOnH:       []int{},
+			OperationOnB:       []int{},
+			RightmostColumnOfQ: q,
+		}
+		err := RemoveCornerFloat64(hFloat64, numCols, rowOperation, 1.e-10)
+		assert.NoError(t, err)
+
+		// Calculate the actual row lengths (squared) of the new sub-matrix and compare them
+		// to the saved ones.
+		for i := 0; i < numRows; i++ {
+			actualNormSq := hFloat64[i*numCols+ul] * hFloat64[i*numCols+ul]
+			for j := 1; j < dim; j++ {
+				actualNormSq += hFloat64[i*numCols+ul+j] * hFloat64[i*numCols+ul+j]
+			}
+			assert.Greater(t, 1.e-10, math.Abs(expectedNormsSq[i]-actualNormSq))
+		}
+
+		// Calculate the actual determinant of the dim-by-dim sub-matrix with upper left
+		// corner H[ul][ul]. This should match the
+		actualLogDeterminant := 0.0
+		for i := 0; i < dim; i++ {
+			actualLogDeterminant += math.Log(math.Abs(hFloat64[(ul+i)*numCols+ul+i]))
+		}
+		assert.Greater(t, 1.e-10, math.Abs(actualLogDeterminant-expectedLogDeterminant))
+	}
+	fmt.Printf(
+		"Skipped %d out of %d tests due to randomly generated, singular sub-matrices of H\n",
+		numberOfTestsSkipped, numTests,
+	)
+	fmt.Printf("(n, number of times dimension was n): ")
+	comma := ""
+	for i := 0; i <= numCols; i++ {
+		fmt.Printf("%s (%d %d)", comma, i, dimensionsTested[i])
+		comma = ","
+	}
+	fmt.Printf("\n(n, number of times upper left was n): ")
+	comma = ""
+	for i := 0; i <= numCols; i++ {
+		fmt.Printf("%s (%d %d)", comma, i, upperLeftTested[i])
+		comma = ","
+	}
+	fmt.Printf("\n(n, number of times lower right was n): ")
+	comma = ""
+	for i := 0; i <= numCols; i++ {
+		fmt.Printf("%s (%d %d)", comma, i, lowerRightTested[i])
+		comma = ","
+	}
+	fmt.Printf("\n")
 }
 
 func getRowLengths(t *testing.T, h *bigmatrix.BigMatrix) *bigmatrix.BigMatrix {

@@ -240,7 +240,10 @@ func Float64DotProduct(
 	for k := start + 1; k < end; k++ {
 		// retVal += x[row][k] y[k][column]
 		if x.values[row*xNumCols+k].Cmp(zero) != 0 {
-			retVal.Float64Mul(y[k*yNumCols+column], x.values[row*xNumCols+k])
+			term := bignumber.NewFromInt64(0).Float64Mul(
+				y[k*yNumCols+column], x.values[row*xNumCols+k],
+			)
+			retVal.Add(retVal, term)
 		}
 	}
 	return retVal, nil
