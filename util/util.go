@@ -36,9 +36,9 @@ func MultiplyIntInt(x []int64, y []int64, n int) ([]int64, error) {
 	return xy, nil
 }
 
-// MultiplyFloatInt returns the matrix product, x * y, for []float64
-// x and []int64 y
-func MultiplyFloatInt(x []float64, y []int64, n int) ([]float64, error) {
+// MultiplyFloatFloat returns the matrix product, x * y, for []float64
+// x and []float64 y
+func MultiplyFloatFloat(x []float64, y []float64, n int) ([]float64, error) {
 	// x is mxn, y is nxp and xy is mxp.
 	m, p, err := getDimensions(len(x), len(y), n)
 	if err != nil {
@@ -47,9 +47,9 @@ func MultiplyFloatInt(x []float64, y []int64, n int) ([]float64, error) {
 	xy := make([]float64, m*p)
 	for i := 0; i < m; i++ {
 		for j := 0; j < p; j++ {
-			xy[i*p+j] = x[i*n] * float64(y[j]) // x[i][0] * y[0][j]
+			xy[i*p+j] = x[i*n] * y[j] // x[i][0] * y[0][j]
 			for k := 1; k < n; k++ {
-				xy[i*p+j] += x[i*n+k] * float64(y[k*p+j]) // x[i][k] * y[k][j]
+				xy[i*p+j] += x[i*n+k] * y[k*p+j] // x[i][k] * y[k][j]
 			}
 		}
 	}

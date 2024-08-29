@@ -465,6 +465,70 @@ func TestRemoveCornerFloat64(t *testing.T) {
 	fmt.Printf("\n")
 }
 
+func TestInvertLowerTriangular(t *testing.T) {
+	const (
+		numCols            = 17
+		numTests           = 100
+		firstSeed          = 4735835
+		seedIncr           = 1027
+		maxDiagonalElement = 100
+	)
+
+	maxError := 0.0
+	for testNbr := 0; testNbr < numTests; testNbr++ {
+		// Generate x
+		rand.Seed(int64(firstSeed + (seedIncr * testNbr)))
+		x := make([]float64, (numCols+1)*numCols)
+		for i := 0; i < numCols; i++ {
+			diagonalEntryAsInt := rand.Intn(maxDiagonalElement*2) - maxDiagonalElement
+			if diagonalEntryAsInt == 0 {
+				diagonalEntryAsInt = 1
+			}
+			x[i*numCols+i] = float64(diagonalEntryAsInt)
+		}
+		for j := 0; j < numCols; j++ {
+			diagonalElement := x[j*numCols+j]
+			for i := j + 1; i < numCols; i++ {
+				x[i*numCols+j] = diagonalElement * (.01 * float64(rand.Intn(100)-50))
+			}
+		}
+
+		// Invert x
+		xInverse := InvertLowerTriangular(x, numCols)
+
+		// Check inverses of all sub-matrices
+		for minIndex := 0; minIndex < numCols-1; minIndex++ {
+			for dim := 2; dim < (numCols - minIndex); dim++ {
+				xSubMatrix := make([]float64, dim*dim)
+				xInverseSubMatrix := make([]float64, dim*dim)
+				for i := 0; i < dim; i++ {
+					for j := 0; j < dim; j++ {
+						xSubMatrix[i*dim+j] = x[(i+minIndex)*numCols+minIndex+j]
+						xInverseSubMatrix[i*dim+j] = xInverse[(i+minIndex)*numCols+minIndex+j]
+					}
+				}
+				shouldBeIdentity, err := util.MultiplyFloatFloat(xSubMatrix, xInverseSubMatrix, dim)
+				assert.NoError(t, err)
+				for i := 0; i < dim; i++ {
+					for j := 0; j < dim; j++ {
+						var entryError float64
+						if i == j {
+							entryError = shouldBeIdentity[i*dim+j] - 1.0
+						} else {
+							entryError = shouldBeIdentity[i*dim+j]
+						}
+						entryError = entryError * entryError
+						if entryError > maxError {
+							maxError = entryError
+						}
+					}
+				}
+			}
+		}
+	}
+	assert.Less(t, maxError, 1.e-10)
+}
+
 func getRowLengths(t *testing.T, h *bigmatrix.BigMatrix) *bigmatrix.BigMatrix {
 	retVal := bigmatrix.NewEmpty(1, h.NumCols())
 	for j := 0; j < h.NumCols(); j++ {

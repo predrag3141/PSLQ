@@ -409,3 +409,33 @@ func RemoveCornerFloat64(hFloat64 []float64, numCols int, ro *RowOperation, zero
 	}
 	return nil
 }
+
+// InvertLowerTriangular inverts the first numCols rows of x. x must
+// - Have at least as many rows as columns
+// - Be lower quadrangular
+// - Have non-zero diagonal elements
+func InvertLowerTriangular(x []float64, numCols int) []float64 {
+	inverse := make([]float64, numCols*numCols)
+	for i := 0; i < numCols; i++ {
+		inverse[i*numCols+i] = 1.0
+	}
+	for i := 1; i < numCols; i++ {
+		oneOverXII := 1.0 / x[i*numCols+i]
+		for j := 0; j < i; j++ {
+			dotProduct := 0.0
+			for k := 0; k < i; k++ {
+				dotProduct += x[i*numCols+k] * inverse[k*numCols+j]
+			}
+			inverse[i*numCols+j] = -dotProduct * oneOverXII
+		}
+	}
+
+	// Divide columns by diagonal elements
+	for j := 0; j < numCols; j++ {
+		oneOverXJJ := 1.0 / x[j*numCols+j]
+		for i := 0; i < numCols; i++ {
+			inverse[i*numCols+j] *= oneOverXJJ
+		}
+	}
+	return inverse
+}
