@@ -205,8 +205,8 @@ func Int64DotProduct(
 	return retVal, nil
 }
 
-// Float64DotProduct returns sum(x[row][k] y[k][col]) over k in {start,...,end-1}
-func Float64DotProduct(
+// Float64DotProductA returns sum(x[row][k] y[k][col]) over k in {start,...,end-1}
+func Float64DotProductA(
 	x *BigMatrix, y []float64, row, column, start, end int, trustXandY bool,
 ) (*bignumber.BigNumber, error) {
 	zero := bignumber.NewFromInt64(0)
@@ -214,23 +214,26 @@ func Float64DotProduct(
 	yNumCols := len(y) / xNumCols
 	if !trustXandY {
 		if len(y)%xNumCols != 0 {
-			return nil, fmt.Errorf("Float64DotProduct: invalid y with %d rows and %d values",
+			return nil, fmt.Errorf("Float64DotProductA: invalid y with %d rows and %d values",
 				xNumCols, len(x.values),
 			)
 		}
 		if len(x.values) != x.numRows*x.numCols {
-			return nil, fmt.Errorf("Float64DotProduct: invalid x %d x %d with %d values",
+			return nil, fmt.Errorf("Float64DotProductA: invalid x %d x %d with %d values",
 				x.numRows, x.numCols, len(x.values),
 			)
 		}
 	}
-	if start < 0 || end <= start || xNumCols < end {
+	if start < 0 || end < start || xNumCols < end {
 		return nil, fmt.Errorf(
-			"Float64DotProduct: invalid range {%d,...,%d} for x with %d values and %d columns and y %dx%d",
+			"Float64DotProductA: invalid range {%d,...,%d} for x with %d values and %d columns and y %dx%d",
 			start, end-1, len(x.values), xNumCols, xNumCols, yNumCols,
 		)
 	}
 	retVal := bignumber.NewFromInt64(0)
+	if start == end {
+		return retVal, nil
+	}
 	if x.values[row*xNumCols+start].Cmp(zero) != 0 {
 		// retVal <- x[row][start] y[start][column]
 		retVal.Float64Mul(
@@ -242,6 +245,53 @@ func Float64DotProduct(
 		if x.values[row*xNumCols+k].Cmp(zero) != 0 {
 			term := bignumber.NewFromInt64(0).Float64Mul(
 				y[k*yNumCols+column], x.values[row*xNumCols+k],
+			)
+			retVal.Add(retVal, term)
+		}
+	}
+	return retVal, nil
+}
+
+// Float64DotProductB returns sum(x[row][k] y[k][col]) over k in {start,...,end-1}
+func Float64DotProductB(
+	x []float64, xNumCols int, y *BigMatrix, row, column, start, end int, trustXandY bool,
+) (*bignumber.BigNumber, error) {
+	zero := bignumber.NewFromInt64(0)
+	yNumCols := y.numCols
+
+	if !trustXandY {
+		if len(x)%yNumCols != 0 {
+			return nil, fmt.Errorf("Float64DotProductB: invalid y with %d rows and %d values",
+				xNumCols, len(y.values),
+			)
+		}
+		if len(y.values) != y.numRows*y.numCols {
+			return nil, fmt.Errorf("Float64DotProductB: invalid x %d x %d with %d values",
+				y.numRows, y.numCols, len(y.values),
+			)
+		}
+	}
+	if start < 0 || end < start || xNumCols < end {
+		return nil, fmt.Errorf(
+			"Float64DotProductB: invalid range {%d,...,%d} for x with %d values and %d columns and y %dx%d",
+			start, end-1, len(y.values), xNumCols, xNumCols, yNumCols,
+		)
+	}
+	retVal := bignumber.NewFromInt64(0)
+	if start == end {
+		return retVal, nil
+	}
+	if y.values[start*yNumCols+column].Cmp(zero) != 0 {
+		// retVal <- x[row][start] y[start][column]
+		retVal.Float64Mul(
+			x[row*xNumCols+start], y.values[start*yNumCols+column],
+		)
+	}
+	for k := start + 1; k < end; k++ {
+		// retVal += x[row][k] y[k][column]
+		if y.values[k*yNumCols+column].Cmp(zero) != 0 {
+			term := bignumber.NewFromInt64(0).Float64Mul(
+				x[row*xNumCols+k], y.values[k*yNumCols+column],
 			)
 			retVal.Add(retVal, term)
 		}

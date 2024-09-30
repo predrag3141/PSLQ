@@ -579,14 +579,6 @@ func (s *State) checkAandB() (bool, error) {
 			b[j*s.numRows+i] = columnOfB[j]
 		}
 	}
-	//fmt.Printf("================= A:\n") // debug
-	//for i := 0; i < s.numRows; i++ {     // debug
-	//	fmt.Printf("%v\n", a[i*s.numRows:(i+1)*s.numRows]) // debug
-	//} // debug
-	//fmt.Printf("B:\n")               // debug
-	//for i := 0; i < s.numRows; i++ { // debug
-	//	fmt.Printf("%v\n", b[i*s.numRows:(i+1)*s.numRows]) // debug
-	//} // debug
 
 	aAndBAreInverses, err := util.IsInversePair(a, b, s.numRows)
 	if err != nil {

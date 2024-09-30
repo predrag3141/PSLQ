@@ -159,7 +159,7 @@ func GetInt64D(
 //
 // - Whether the reduction matrix is the identity
 //
-//   - Whether GetInt64D calculated an all-zero row (left of the diagonal element),
+//   - Whether GetInt64DFloat64 calculated an all-zero row (left of the diagonal element),
 //     in spite of detecting the need to change the row. This is wasteful but not an error,
 //     because it can happen due to round-off.
 //
@@ -174,7 +174,7 @@ func GetInt64DFloat64(
 	maxEntryOfD := int64(1) // since the diagonal of D has 1s!
 	isIdentity := true
 	calculatedAllZeroRow := false
-	columnThresh := getColumnThresholdsFloat64(h, numCols)
+	columnThresh := getRowAndColumnThresholdsFloat64(h, numCols)
 
 	// Compute ratios of elements below the diagonal of H and the diagonal elements above them.
 	hkjOverHjj, err := getRatiosFloat64(h, numRows, numCols)
@@ -196,7 +196,7 @@ func GetInt64DFloat64(
 		// Skip rows that do not need reduction
 		reduceRow := false
 		if i > 0 {
-			reduceRow, _, err = rowNeedsReductionFloat64(h, numCols, columnThresh, i)
+			reduceRow, _ = rowNeedsReductionFloat64(h, numCols, columnThresh, i, 0)
 		}
 		if !reduceRow {
 			for j := 0; j < i; j++ {
@@ -419,14 +419,14 @@ func GetBigNumberD(
 //
 // - Whether the reduction matrix is the identity
 //
-//   - Whether GetBigNumberD calculated an all-zero row (left of the diagonal element),
+//   - Whether GetBigNumberDFloat64 calculated an all-zero row (left of the diagonal element),
 //     in spite of detecting the need to change the row. This is wasteful but not an error,
 //     because it can happen due to round-off.
 //
 // - Any error encountered.
 //
 // Entries below the diagonal of DH are bounded by the absolute value of the diagonal
-// element above them, multiplied by .5+[gentle reduction mode].
+// element above them, multiplied by .5.
 func GetBigNumberDFloat64(
 	h []float64, numRows, numCols int, dBigNumberMatrix *bigmatrix.BigMatrix,
 ) (*bignumber.BigNumber, bool, bool, error) {
@@ -437,7 +437,7 @@ func GetBigNumberDFloat64(
 	maxEntryOfD := bignumber.NewFromInt64(1) // since the diagonal of D has 1s!
 	isIdentity := true
 	calculatedAllZeroRow := false
-	columnThresh := getColumnThresholdsFloat64(h, numCols)
+	columnThresh := getRowAndColumnThresholdsFloat64(h, numCols)
 
 	// Get 1/H[j][j] for all j
 	reciprocalDiagonal := make([]float64, numCols)
@@ -453,27 +453,27 @@ func GetBigNumberDFloat64(
 		err := dBigNumberMatrix.Set(i, i, one)
 		if err != nil {
 			return maxEntryOfD, isIdentity, calculatedAllZeroRow,
-				fmt.Errorf("GetBigNumerD: could not set H[%d][%d]: %q", i, i, err.Error())
+				fmt.Errorf("GetBigNumerDFloat64: could not set D[%d][%d]: %q", i, i, err.Error())
 		}
 		for j := i + 1; j < numRows; j++ {
 			err = dBigNumberMatrix.Set(i, j, zero)
 			if err != nil {
 				return maxEntryOfD, isIdentity, calculatedAllZeroRow,
-					fmt.Errorf("GetBigNumerD: could not set H[%d][%d]: %q", i, j, err.Error())
+					fmt.Errorf("GetBigNumerDFloat64: could not set D[%d][%d]: %q", i, j, err.Error())
 			}
 		}
 
 		// Skip rows that do not need reduction
 		reduceRow := false
 		if i > 0 {
-			reduceRow, _, err = rowNeedsReductionFloat64(h, numCols, columnThresh, i)
+			reduceRow, _ = rowNeedsReductionFloat64(h, numCols, columnThresh, i, 0)
 		}
 		if !reduceRow {
 			for j := 0; j < i; j++ {
 				err = dBigNumberMatrix.Set(i, j, zero)
 				if err != nil {
 					return nil, isIdentity, calculatedAllZeroRow,
-						fmt.Errorf("GetBigNumerD: could not set H[%d][%d]: %q", i, j, err.Error())
+						fmt.Errorf("GetBigNumerDFloat64: could not set D[%d][%d]: %q", i, j, err.Error())
 				}
 			}
 			continue
@@ -489,7 +489,7 @@ func GetBigNumberDFloat64(
 				dIK, err = dBigNumberMatrix.Get(i, k)
 				if err != nil {
 					return nil, isIdentity, calculatedAllZeroRow,
-						fmt.Errorf("GetBigNumerD: could not get D[%d][%d]: %q", i, k, err.Error())
+						fmt.Errorf("GetBigNumerDFloat64: could not get D[%d][%d]: %q", i, k, err.Error())
 				}
 				hKJ := h[k*numCols+j]
 				hKJOverHJJ := hKJ * reciprocalDiagonal[j]
@@ -521,7 +521,7 @@ func GetBigNumberDFloat64(
 			err = dBigNumberMatrix.Set(i, j, dMatrixEntry)
 			if err != nil {
 				return nil, isIdentity, calculatedAllZeroRow,
-					fmt.Errorf("GetBigMatrixD: could not set D[%d][%d]: %q", i, j, err.Error())
+					fmt.Errorf("GetBigMatrixDFloat64: could not set D[%d][%d]: %q", i, j, err.Error())
 			}
 		}
 		if rowIsAllZero {
@@ -532,6 +532,147 @@ func GetBigNumberDFloat64(
 		}
 	}
 	return maxEntryOfD, isIdentity, calculatedAllZeroRow, nil
+}
+
+// GetBigNumberEFromFloat64M returns a row operation matrix, E, that reduces a lower quadrangular
+// matrix like the matrix H in the original PSLQ paper. It returns
+//
+// - The maximum element of eInt64Matrix
+//
+// - Whether the reduction matrix is the identity
+//
+//   - Whether GetBigNumberEFromFloat64M calculated an all-zero column (below the diagonal
+//     element), in spite of detecting the need to change the row. This is wasteful but not
+//     an error, because it can happen due to round-off.
+//
+// - Any error encountered.
+//
+// Entries to the left of the diagonal of ME are bounded by the absolute value of the diagonal
+// element to their right, multiplied by .5.
+func GetBigNumberEFromFloat64M(
+	m []float64, numCols int, eBigNumberMatrix *bigmatrix.BigMatrix,
+) (*bignumber.BigNumber, bool, bool, error) {
+	// Initializations
+	one := bignumber.NewFromInt64(1)
+	zero := bignumber.NewFromInt64(0)
+	half := bignumber.NewPowerOfTwo(-1)
+	maxEntryOfE := bignumber.NewFromInt64(1) // since the diagonal of E has 1s!
+	isIdentity := true
+	calculatedAllZeroColumn := false
+	rowThresh := getRowAndColumnThresholdsFloat64(m, numCols)
+
+	// The bottom row and right-most column of E have zeroes off the diagonal and one
+	// on the diagonal. Just setting the bottom-right entry to one implements this.
+	err := eBigNumberMatrix.Set(numCols, numCols, one)
+
+	// Get 1/H[j][j] for all j
+	reciprocalDiagonal := make([]float64, numCols)
+	for j := 0; j < numCols; j++ {
+		reciprocalDiagonal[j] = 1.0 / m[j*numCols+j]
+	}
+
+	// Compute E
+	for j := numCols - 1; 0 <= j; j-- {
+		// Set the diagonal element to 1. Also, zero out the entries above the diagonal, because
+		// there is no guarantee that E comes into this function as a lower-triangular matrix.
+		err = eBigNumberMatrix.Set(j, j, one)
+		if err != nil {
+			return maxEntryOfE, isIdentity, calculatedAllZeroColumn,
+				fmt.Errorf("GetBigNumberEFromFloat64M: could not set E[%d][%d]: %q", j, j, err.Error())
+		}
+		for i := 0; i < j; i++ {
+			err = eBigNumberMatrix.Set(i, j, zero)
+			if err != nil {
+				return maxEntryOfE, isIdentity, calculatedAllZeroColumn,
+					fmt.Errorf("GetBigNumberEFromFloat64M: could not set E[%d][%d]: %q", i, j, err.Error())
+			}
+		}
+
+		// Skip columns that do not need reduction
+		reduceColumn := false
+		if j < (numCols - 1) {
+			reduceColumn, _ = columnNeedsReductionFloat64(m, numCols, rowThresh, j, 0)
+		}
+		if !reduceColumn {
+			// E contains zeroes even below the diagonal.
+			for i := j + 1; i <= numCols; i++ {
+				err = eBigNumberMatrix.Set(i, j, zero)
+				if err != nil {
+					return nil, isIdentity, calculatedAllZeroColumn,
+						fmt.Errorf(
+							"GetBigNumberEFromFloat64M: could not set E[%d][%d]: %q", i, j, err.Error(),
+						)
+				}
+			}
+			continue
+		}
+
+		// It is always true that the last entry in the column, E[numCols][j], is zero.
+		err = eBigNumberMatrix.Set(numCols, j, zero)
+		if err != nil {
+			return nil, isIdentity, calculatedAllZeroColumn,
+				fmt.Errorf(
+					"GetBigNumberEFromFloat64M: could not set E[%d][%d]: %q", numCols, j, err.Error(),
+				)
+		}
+
+		// Column j needs reduction
+		columnIsAllZero := true
+		for i := j + 1; i < numCols; i++ {
+			// Initially, compute the entry in E, except not rounded to the nearest integer
+			eMatrixEntry := bignumber.NewFromInt64(0).Float64Mul(m[i*numCols+j], one)
+			for k := j + 1; k < i; k++ {
+				var eKJ *bignumber.BigNumber
+				eKJ, err = eBigNumberMatrix.Get(j, k)
+				if err != nil {
+					return nil, isIdentity, calculatedAllZeroColumn,
+						fmt.Errorf(
+							"GetBigNumberEFromFloat64M: could not get D[%d][%d]: %q", j, k, err.Error(),
+						)
+				}
+				mIK := m[i*numCols+k]
+				mIKeKJ := bignumber.NewFromInt64(0).Float64Mul(mIK, eKJ)
+				eMatrixEntry.Sub(eMatrixEntry, mIKeKJ)
+			}
+			eMatrixEntry.Float64Mul(-reciprocalDiagonal[i], eMatrixEntry)
+
+			// Next, round the entry to the nearest integer.
+			if eMatrixEntry.Cmp(zero) > 0 {
+				eMatrixEntry.Add(eMatrixEntry, half)
+				eMatrixEntry.RoundTowardsZero()
+				if eMatrixEntry.Cmp(maxEntryOfE) > 0 {
+					maxEntryOfE.Set(eMatrixEntry)
+				}
+			} else {
+				eMatrixEntry.Sub(eMatrixEntry, half)
+				eMatrixEntry.RoundTowardsZero()
+				absEntry := bignumber.NewFromInt64(0).Abs(eMatrixEntry)
+				if absEntry.Cmp(maxEntryOfE) > 0 {
+					maxEntryOfE.Set(absEntry)
+				}
+			}
+			if !eMatrixEntry.IsZero() {
+				isIdentity = false
+				columnIsAllZero = false
+			}
+
+			// Set E[i][j]
+			err = eBigNumberMatrix.Set(i, j, eMatrixEntry)
+			if err != nil {
+				return nil, isIdentity, calculatedAllZeroColumn,
+					fmt.Errorf(
+						"GetBigNumberEFromFloat64M: could not set E[%d][%d]: %q", i, j, err.Error(),
+					)
+			}
+		}
+		if columnIsAllZero {
+			// Since this row of H needed reduction, it should be reported that this
+			// row of D has only zeroes (other than the diagonal element, of course).
+			// This is not an error, since it can happen due to round-off.
+			calculatedAllZeroColumn = true
+		}
+	}
+	return maxEntryOfE, isIdentity, calculatedAllZeroColumn, nil
 }
 
 // GetInt64E returns the inverse of dInt64Matrix, provided that dInt64Matrix is a lower
@@ -768,11 +909,13 @@ func BigNumberReduceHFloat64(h []float64, numRows, numCols int, dBigNumberMatrix
 			} else {
 				// The partial entry the variables refer to below involves
 				// all but the diagonal elements of D and H.
-				partialEntryAsBigNumber, err := bigmatrix.Float64DotProduct(
-					dBigNumberMatrix, h, i, j, 0, i, true,
+				partialEntryAsBigNumber, err := bigmatrix.Float64DotProductA(
+					dBigNumberMatrix, h, i, j, j, i, true,
 				)
 				if err != nil {
-					return fmt.Errorf("ReduceH: error in Int64DotProduct: %q", err.Error())
+					return fmt.Errorf(
+						"BigNumberReduceHFloat64: error in Int64DotProduct: %q", err.Error(),
+					)
 				}
 				partialEntryAsFloat := partialEntryAsBigNumber.AsFloat()
 				partialEntryAsFloat64, _ := partialEntryAsFloat.Float64()
@@ -787,6 +930,49 @@ func BigNumberReduceHFloat64(h []float64, numRows, numCols int, dBigNumberMatrix
 	for i := 0; i < numRows; i++ {
 		for j := 0; j <= i && j < numCols; j++ {
 			h[i*numCols+j] = newEntries[cursor]
+			cursor++
+		}
+	}
+	return nil
+}
+
+// BigNumberReduceMFloat64 reduces m by right-multiplying it by the reduction matrix,
+// eBigNumberMatrix. m should be numCols by numCols, as it is intended to refer to the
+// inverse of the first numCols rows of H. eBigNumberMatrix should have been obtained
+// by calling a version of GetE(h), such as GetBigNumberEFromM.
+func BigNumberReduceMFloat64(m []float64, numCols int, eBigNumberMatrix *bigmatrix.BigMatrix) error {
+	newEntries := make([]float64, numCols*numCols)
+	cursor := 0
+	for i := 0; i < numCols; i++ {
+		for j := 0; j <= i; j++ {
+			// M[i][k] == 0 if k > i and E[k][j] == 0 if j > k
+			// So unless k <= i and j <= k, M[i][k] E[k][j] == 0
+			// Therefore, the loop below is for k = j; k <= i; k++.
+			// Also, M[i][j] E[i][i] is just M[i][j] since D has 1s on the diagonal
+			if i == 0 {
+				newEntries[cursor] = m[i*numCols+j]
+			} else {
+				// The partial entry the variables refer to below involves
+				// all but the diagonal elements of D and H.
+				partialEntryAsBigNumber, err := bigmatrix.Float64DotProductB(
+					m, numCols, eBigNumberMatrix, i, j, j+1, i+1, true,
+				)
+				if err != nil {
+					return fmt.Errorf("ReduceH: error in Int64DotProduct: %q", err.Error())
+				}
+				partialEntryAsFloat := partialEntryAsBigNumber.AsFloat()
+				partialEntryAsFloat64, _ := partialEntryAsFloat.Float64()
+				newEntries[cursor] = partialEntryAsFloat64 + m[i*numCols+j]
+			}
+			cursor++
+		}
+	}
+
+	// newEntries now contains the possibly-non-zero elements of the updated H
+	cursor = 0
+	for i := 0; i < numCols; i++ {
+		for j := 0; j <= i; j++ {
+			m[i*numCols+j] = newEntries[cursor]
 			cursor++
 		}
 	}
@@ -1211,14 +1397,14 @@ func getColumnThresholds(
 	return columnThreshGentle, columnThreshFull, nil
 }
 
-// getColumnThresholdsFloat64 returns the maximum absolute value in each column under full
-// reduction
-func getColumnThresholdsFloat64(h []float64, numCols int) []float64 {
+// getRowAndColumnThresholdsFloat64 returns the maximum absolute value in each column under full
+// reduction of H. This is also the row thresholds when reducing the inverse, M, of H.
+func getRowAndColumnThresholdsFloat64(hmFloat64 []float64, numCols int) []float64 {
 	columnThresh := make([]float64, numCols)
 
 	// Set thresholds
 	for j := 0; j < numCols; j++ {
-		columnThresh[j] = 0.5 * math.Abs(h[j*numCols+j])
+		columnThresh[j] = 0.5 * math.Abs(hmFloat64[j*numCols+j])
 	}
 	return columnThresh
 }
@@ -1288,20 +1474,54 @@ func rowNeedsReduction(
 	return false, -1, nil
 }
 
-// rowNeedsReductionFloat64 returns whether row rowNumber needs reduction
+// rowNeedsReductionFloat64 returns whether row rowNumber needs reduction, and what column
+// exceeds the threshold. The threshold is increased by 2^log2tolerance if log2tolerance
+// is negative, else by zero.
 func rowNeedsReductionFloat64(
-	h []float64, numCols int, columnThresh []float64, rowNumber int,
-) (bool, int, error) {
+	hFloat64 []float64, numCols int, columnThresh []float64, rowNumber, log2Tolerance int,
+) (bool, int) {
+	// In the floating point case, row numCols is presumed to be all-zero
+	if rowNumber == numCols {
+		return false, -1
+	}
+	var tolerance float64
+	if log2Tolerance < 0 {
+		tolerance = math.Pow(2.0, float64(log2Tolerance))
+	}
+
 	// Check whether all elements in the row are bounded by columnThresh.
 	for j := 0; j < rowNumber; j++ {
-		absHIJ := math.Abs(h[rowNumber*numCols+j])
-		if absHIJ > columnThresh[j] {
-			return true, j, nil
+		absHIJ := math.Abs(hFloat64[rowNumber*numCols+j])
+		if absHIJ > (columnThresh[j] + tolerance) {
+			return true, j
 		}
 	}
 
 	// No elements in row rowNumber need reducing
-	return false, -1, nil
+	return false, -1
+}
+
+// columnNeedsReductionFloat64 returns whether column columnNumber needs reduction, and
+// what row exceeds the threshold. The threshold is increased by 2^log2tolerance if log2tolerance
+// is negative, else by zero.
+func columnNeedsReductionFloat64(
+	mFloat64 []float64, numCols int, rowThresh []float64, columnNumber, log2tolerance int,
+) (bool, int) {
+	var tolerance float64
+	if log2tolerance < 0 {
+		tolerance = math.Pow(2.0, float64(log2tolerance))
+	}
+
+	// Check whether all elements in the row are bounded by columnThresh.
+	for i := columnNumber + 1; i < numCols; i++ {
+		absHIJ := math.Abs(mFloat64[i*numCols+columnNumber])
+		if absHIJ > (rowThresh[i] + tolerance) {
+			return true, i
+		}
+	}
+
+	// No elements in row rowNumber need reducing
+	return false, -1
 }
 
 // getLastNonZero returns the last column number in H, starting from the left, that contains
@@ -1326,7 +1546,7 @@ func getLastNonZero(h *bigmatrix.BigMatrix, caller string) (int, error) {
 	return -1, nil
 }
 
-// isReduced is a convenience function that wraps a series of tests of the rows of H that use
+// isRowReduced is a convenience function that wraps a series of tests of the rows of H that use
 // rowNeedsReduction. Returned values:
 //
 // - whether H is reduced
@@ -1334,7 +1554,7 @@ func getLastNonZero(h *bigmatrix.BigMatrix, caller string) (int, error) {
 // - a row and column that exceeds the threshold for H being reduced, or (-1, -1) if H is reduced
 //
 // - any error encountered
-func isReduced(
+func isRowReduced(
 	h *bigmatrix.BigMatrix, reductionMode int, gentlyReduceAllRows bool, log2tolerance int, caller string,
 ) (bool, int, int, error) {
 	numRows := h.NumRows()
@@ -1360,26 +1580,40 @@ func isReduced(
 	return true, -1, -1, nil
 }
 
-// isReducedFloat64 is a convenience function that wraps a series of tests of the rows of H that use
+// isRowReducedFloat64 is a convenience function that wraps a series of tests of the rows of H that use
 // rowNeedsReduction. Returned values:
 //
-// - whether H is reduced
+// - whether H is row reduced
 //
 // - a row and column that exceeds the threshold for H being reduced, or (-1, -1) if H is reduced
-//
-// - any error encountered
-func isReducedFloat64(
-	h []float64, numRows, numCols int, log2tolerance int, caller string,
-) (bool, int, int, error) {
-	tolerance := math.Pow(2.0, float64(log2tolerance))
-	for i := 0; i < numRows; i++ {
-		for j := 0; j < i; j++ {
-			if math.Abs(2.0*h[i*numCols+j])-math.Abs(h[j*numCols+j]) > tolerance {
-				return false, i, j, nil
-			}
+func isRowReducedFloat64(hFloat64 []float64, numCols int, log2tolerance int) (bool, int, int) {
+	columnThresh := getRowAndColumnThresholdsFloat64(hFloat64, numCols)
+	for i := 0; i < numCols; i++ {
+		needsReduction, column := rowNeedsReductionFloat64(hFloat64, numCols, columnThresh, i, log2tolerance)
+		if needsReduction {
+			return false, i, column
 		}
 	}
-	return true, -1, -1, nil
+	return true, -1, -1
+}
+
+// isColumnReducedFloat64 is a convenience function that wraps a series of tests of the columns of M
+// that use columnNeedsReductionFloat64. Returned values:
+//
+// - whether M is column reduced
+//
+// - a row and column that exceeds the threshold for M being reduced, or (-1, -1) if M is reduced
+func isColumnReducedFloat64(
+	mFloat64 []float64, numCols int, log2tolerance int,
+) (bool, int, int) {
+	rowThresh := getRowAndColumnThresholdsFloat64(mFloat64, numCols)
+	for j := 0; j < numCols; j++ {
+		needsReduction, row := columnNeedsReductionFloat64(mFloat64, numCols, rowThresh, j, log2tolerance)
+		if needsReduction {
+			return false, row, j
+		}
+	}
+	return true, -1, -1
 }
 
 // bigNumberDToRD left-multiplies D in-place by an expansion, R, of subMatrix into the

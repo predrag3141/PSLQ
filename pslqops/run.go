@@ -540,19 +540,19 @@ func (s *State) CheckInvariants(context string) error {
 	var hIsReduced bool
 	var row, col int
 	if s.useFloat64H {
-		hIsReduced, row, col, err = isReducedFloat64(
-			s.hFloat64, s.numRows, s.numCols, -10, context,
+		hIsReduced, row, col = isRowReducedFloat64(
+			s.hFloat64, s.numCols, -10,
 		)
 	} else {
-		hIsReduced, row, col, err = isReduced(
+		hIsReduced, row, col, err = isRowReduced(
 			s.h, s.reductionMode, s.gentlyReduceAllRows, -10, context, // s.useFloat64H
 		)
-	}
-	if err != nil {
-		return fmt.Errorf(
-			"checkInvariants (%s): error determining whether H is reduced: %q",
-			context, err.Error(),
-		)
+		if err != nil {
+			return fmt.Errorf(
+				"checkInvariants (%s): error determining whether H is reduced: %q",
+				context, err.Error(),
+			)
+		}
 	}
 	if !hIsReduced {
 		return fmt.Errorf("checkInvariants (%s): H[%d][%d] is not reduced. H=\n%v",
